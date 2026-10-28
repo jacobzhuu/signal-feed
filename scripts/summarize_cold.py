@@ -45,6 +45,15 @@ def summarize(root):
                 if key in identities and identities[key] != identity[key]:
                     raise ValueError("Mixed experiment sources")
                 identities[key] = identity[key]
+            for key in ("config", "selection_sha256", "baseline_gate_sha256"):
+                if key in identities and identities[key] != report[key]:
+                    raise ValueError("Mixed fusion configurations")
+                identities[key] = report[key]
+            if (
+                sha256(root / f"models/coldfuse-{seed}/model.pt")
+                != report["cold_model_sha256"]
+            ):
+                raise ValueError("Changed evaluated checkpoint")
             if natural in sample_ids and sample_ids[natural] != report["ids"]:
                 raise ValueError("Seed samples differ")
             sample_ids[natural] = report["ids"]
@@ -144,6 +153,16 @@ def summarize(root):
             for r in reports
         ],
         uncertainty="Average seed deltas within each impression, then bootstrap users; exploratory unadjusted 95% intervals; no causal CTR inference",
+        runs=[
+            dict(
+                seed=r["seed"],
+                natural=r["natural"],
+                provenance=r["provenance"],
+                cold_model_sha256=r["cold_model_sha256"],
+                predictions_sha256=r["predictions_sha256"],
+            )
+            for r in reports
+        ],
     )
     (root / "reports/cold_summary.json").write_text(json.dumps(result, indent=2))
     with (root / "reports/cold_metrics.csv").open("w") as stream:

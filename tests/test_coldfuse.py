@@ -47,6 +47,83 @@ def test_zero_and_one_click_no_fake_evidence():
     assert core.recommend([], np.zeros(len(x), dtype=bool))["ids"] == []
 
 
+def test_selection_accepts_exact_registered_grid_and_rejects_duplicate():
+    from dataclasses import asdict
+    import pytest
+    from signalfeed.cold_experiments import GRID, validate_selection
+
+    source = dict(split="valid", source_sha256="fixed", data={})
+    trials = [dict(config=asdict(c)) for c in GRID]
+    assert len(trials) == 27
+    validate_selection(dict(provenance=source, trials=trials), source)
+    with pytest.raises(ValueError, match="complete validation grid"):
+        validate_selection(
+            dict(provenance=source, trials=trials[:-1] + trials[:1]), source
+        )
+    with pytest.raises(ValueError, match="sources differ"):
+        validate_selection(
+            dict(provenance=source, trials=trials),
+            dict(source, source_sha256="changed"),
+        )
+
+
+def test_small_tune_to_evaluate_pipeline(tmp_path, monkeypatch):
+    """Synthetic control-flow regression, never an experimental quality result."""
+    import signalfeed.cold_experiments as exp
+    from signalfeed.features import Features
+    from signalfeed.provenance import sha256
+
+    def path(name):
+        p = tmp_path / name
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    f = object.__new__(Features)
+    f.x, core = fixture()
+    f.news = [dict(id=str(i), category=i % 2) for i in range(20)]
+    f.index = {str(i): i for i in range(20)}
+    f.categories, f.first, f.cutoff = np.arange(20) % 2, np.arange(20), 19
+    f.pop, f.cf, f.codes = core.pop, core.cf, core.codes
+    model = Ranker().eval()
+    row = dict(
+        id="example",
+        user="one",
+        time=30,
+        history=[str(i) for i in range(15)],
+        items=["18", "19"],
+        labels=[1, 0],
+    )
+    for name in ("coldfuse", "sid", "ranker"):
+        (path(f"models/{name}-42") / "model.pt").write_bytes(b"synthetic")
+    (path("models") / "fusion.json").write_text("{}")
+    source = dict(
+        source_sha256="fixture",
+        data={},
+        models={
+            name: sha256(path(f"models/{name}-42") / "model.pt")
+            for name in ("sid", "ranker")
+        },
+    )
+    monkeypatch.setattr(exp, "path", path)
+    monkeypatch.setattr(
+        exp, "run_identity", lambda seed, split: dict(source, split=split)
+    )
+    monkeypatch.setattr(exp, "code_identity", lambda: source)
+    monkeypatch.setattr(exp, "setup", lambda seed: (f, core, model, prototypes(f)))
+    monkeypatch.setattr(exp, "load_rows", lambda split: [row])
+    monkeypatch.setattr(exp, "load_ranker", lambda seed: model)
+    monkeypatch.setattr(exp, "load_gate", lambda: dict(threshold=5, weight=1))
+    selection = exp.tune()
+    assert len(selection["trials"]) == 27
+    result = exp.evaluate()
+    assert result["requests"] == 1 and len(result["groups"]) == 10
+    lines = (
+        (path("reports/cold-test-42") / "predictions.jsonl").read_text().splitlines()
+    )
+    assert len(lines) == 10
+    assert all(len(json.loads(line)["variants"]) == 14 for line in lines)
+
+
 def test_protocol_disjoint_and_label_independent():
     x, _ = fixture()
     f = SimpleNamespace(
@@ -131,6 +208,35 @@ def test_cache_key_binds_every_request_input():
 
 def _stall(connection):
     time.sleep(10)
+
+
+def _echo_worker(connection):
+    while True:
+        payload = connection.recv()
+        time.sleep(0.05)
+        connection.send((True, payload))
+
+
+def test_completed_worker_survives_idle_and_reuses_process(monkeypatch):
+    import multiprocessing
+    import signalfeed.cold_worker as worker
+
+    worker.shutdown()
+    context = multiprocessing.get_context("fork")
+    monkeypatch.setattr(worker.multiprocessing, "get_context", lambda _: context)
+    monkeypatch.setattr(worker, "MAX_RUNTIME", 0.3)
+    monkeypatch.setattr(worker, "model_identity", lambda: "test")
+    monkeypatch.setattr(worker, "_worker", _echo_worker)
+    try:
+        assert worker.recommend(dict(value=1), timeout=0.001)[1] == "timeout-fallback"
+        process = worker._process
+        time.sleep(0.4)
+        assert worker._pending is None and process.is_alive()
+        assert worker.recommend(dict(value=1))[1] == "cache"
+        assert worker.recommend(dict(value=2))[0] == dict(value=2)
+        assert worker._process is process
+    finally:
+        worker.shutdown()
 
 
 def test_cold_worker_hard_deadline(monkeypatch):

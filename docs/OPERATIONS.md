@@ -123,7 +123,7 @@ python scripts/review_online.py --output "$review_run_dir/after"
 ## ColdFuse 独立实验与服务
 
 - `GET /api/feed?cold=true` 对应网页“兴趣加速（实验）”。缺少研究权重时仍可提供先验/内容/CF/热门推荐；研究推理有 2 秒等待与 30 秒硬期限，不能把所有成功 HTTP 请求等同于成功生成推理。
-- 独立实验：设置 `SIGNALFEED_BASELINE_HOME` 为经过绑定校验的基线目录、`SIGNALFEED_HOME` 为新的输出目录，然后 `bash scripts/run_cold_experiments.sh`。默认 30,000 训练 impressions、三个种子、81 组内部验证、每种子 1,000 个配对主样本及 300 自然冷样本。已有部分预测不被覆盖，失败应保留并另建运行目录。
+- 独立实验：设置 `SIGNALFEED_BASELINE_HOME` 为经过绑定校验的基线目录、`SIGNALFEED_HOME` 为新的输出目录，然后 `bash scripts/run_cold_experiments.sh`。默认 30,000 训练 impressions、三个种子、27 组内部验证、每种子 1,000 个配对主样本及 300 自然冷样本。已有部分预测不被覆盖，失败应保留并另建运行目录。
 - 新功能只读取 `models/coldfuse-42`、已绑定的 SID、码本及验证选择 `models/coldfuse.json`；MIND 跨域模型不自动晋升为真实线上模型。
 - `signalfeed retrain-online --cold` 从 `cold-semantic-v1` 请求快照读取成熟真实反馈；`signalfeed activate-online --cold --version <版本>` 经过合同及哈希校验回滚，空版本停用 ColdFuse 在线 DNN。原 `retrain-online` 仍只处理旧语义契约。
 - `SIGNALFEED_BENCH_COLD=1 python scripts/benchmark.py` 对隔离测试服务测试 ColdFuse/搜索混合负载，并分别统计研究完成、缓存及各类回退。

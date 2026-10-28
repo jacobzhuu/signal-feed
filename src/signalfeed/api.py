@@ -103,6 +103,8 @@ async def session(request: Request, call_next):
 
 @app.get("/api/health")
 def health():
+    from .cold_serving import online as cold_online
+
     with db() as c:
         count = c.execute("SELECT count(*) FROM articles WHERE deleted=0").fetchone()[0]
     ready = service.vectors is not None and bool(service.items)
@@ -115,6 +117,8 @@ def health():
         "catalog_refreshed_at": service.refresh_at,
         "catalog_error": service.refresh_error,
         "model_error": service.load_error,
+        "cold_online_model_error": cold_online.load_error,
+        "cold_online_model_version": cold_online.online_version,
         "test_events": os.environ.get("SIGNALFEED_TEST_EVENTS", "0") == "1",
         "offline_model_promoted": False,
     }

@@ -101,10 +101,42 @@ def _stop():
     _process = _connection = _pending = _timer = _version = None
 
 
-def _expire(key):
+def _collect():
+    global _pending
+    if _pending is None or not _pending["done"].is_set():
+        return
+    job = _pending
+    ok, result = job["result"]
+    if ok:
+        _cache[job["key"]] = (job["finished"], result)
+        _timer.cancel()
+        _pending = None
+    else:
+        _stop()
+
+
+def _expire(job):
     with _lock:
-        if _pending == key and _timer is threading.current_thread():
-            _stop()
+        if _pending is job and _timer is threading.current_thread():
+            if job["done"].is_set():
+                _collect()
+            else:
+                _stop()
+
+
+def _exchange(connection, payload, job):
+    # Neither a large send nor a partial response can block the request thread
+    # or prevent the deadline thread from terminating this child.
+    try:
+        connection.send(payload)
+        job["result"] = connection.recv()
+    except (OSError, EOFError, TypeError) as exc:
+        job["result"] = (False, str(exc))
+    job["finished"] = time.monotonic()
+    job["done"].set()
+    with _lock:
+        if _pending is job:
+            _collect()
 
 
 def shutdown():
@@ -123,14 +155,7 @@ def recommend(payload, timeout=2):
         if _version is not None and _version != version:
             _stop()
             _cache.clear()
-        if _pending is not None and _connection.poll():
-            ok, result = _connection.recv()
-            _timer.cancel()
-            if ok:
-                _cache[_pending] = (time.monotonic(), result)
-                _pending = None
-            else:
-                _stop()
+        _collect()
         now = time.monotonic()
         if key in _cache and now - _cache[key][0] < 300:
             return _cache[key][1], "cache", version
@@ -146,28 +171,19 @@ def recommend(payload, timeout=2):
             _version = version
         if len(_cache) >= 128:
             _cache.pop(next(iter(_cache)))
-        _pending = key
-        _timer = threading.Timer(MAX_RUNTIME, _expire, args=(key,))
+        job = dict(key=key, done=threading.Event())
+        _pending = job
+        _timer = threading.Timer(MAX_RUNTIME, _expire, args=(job,))
         _timer.daemon = True
         _timer.start()
 
-        # A large Pipe.send may block during child imports; keep it outside the
-        # request thread so the hard deadline can always terminate the process.
-        def send(connection):
-            try:
-                connection.send(payload)
-            except (OSError, EOFError, TypeError):
-                pass
-
-        threading.Thread(target=send, args=(_connection,), daemon=True).start()
-        if _connection.poll(min(timeout, MAX_RUNTIME)):
-            ok, result = _connection.recv()
-            _timer.cancel()
-            _pending = None
-            if ok:
-                _cache[key] = (time.monotonic(), result)
-                return result, "research", version
-            _stop()
+        threading.Thread(
+            target=_exchange, args=(_connection, payload, job), daemon=True
+        ).start()
+        if job["done"].wait(min(timeout, MAX_RUNTIME)):
+            _collect()
+            if key in _cache:
+                return _cache[key][1], "research", version
             return None, "model-error-fallback", version
         return None, "timeout-fallback", version
     except Exception:

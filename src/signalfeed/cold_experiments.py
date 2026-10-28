@@ -22,6 +22,26 @@ from .settings import path
 
 SCENARIOS = ("no_explicit", "proxy_explicit")
 ABLATIONS = ("no_prior", "no_gen", "fixed_gates", "no_shrinkage", "no_dnn")
+GRID = tuple(
+    Config(*v) for v in itertools.product((1, 3, 5), (0.25, 0.75, 1.25), (0, 0.25, 0.5))
+)
+
+
+def validate_selection(selection, source):
+    expected = {tuple(asdict(c).values()) for c in GRID}
+    actual = {
+        tuple(t["config"][k] for k in ("tau", "generation", "dnn"))
+        for t in selection["trials"]
+    }
+    if (
+        selection["provenance"]["split"] != "valid"
+        or len(selection["trials"]) != len(GRID)
+        or actual != expected
+    ):
+        raise ValueError("ColdFuse requires the complete validation grid")
+    for key in ("source_sha256", "data"):
+        if selection["provenance"][key] != source[key]:
+            raise ValueError("Validation and test sources differ; use a fresh run")
 
 
 def context(
@@ -135,10 +155,7 @@ def tune():
     source = run_identity(42, "valid")
     f, core, model, pv = setup(42)
     rows = sample(load_rows("valid"), f, 300)
-    configs = [
-        Config(*v)
-        for v in itertools.product((1, 3, 5), (0.25, 0.75, 1.25), (0, 0.25, 0.5))
-    ]
+    configs = GRID
     values = [defaultdict(list) for _ in configs]
     dest = path("reports/cold-valid")
     if (dest / "trials.json").exists():
@@ -202,11 +219,18 @@ def evaluate(seed=42, natural=False):
     start, source = time.time(), run_identity(seed, "test")
     f, core, model, pv = setup(seed)
     selection = json.loads((path("models") / "coldfuse.json").read_text())
-    if selection["provenance"]["split"] != "valid" or len(selection["trials"]) != 81:
-        raise ValueError("ColdFuse requires the complete validation grid")
-    for key in ("source_sha256", "data"):
-        if selection["provenance"][key] != source[key]:
-            raise ValueError("Validation and test sources differ; use a fresh run")
+    validate_selection(selection, source)
+    if (
+        sha256(path("models/coldfuse-42") / "model.pt")
+        != selection["cold_model_sha256"]
+    ):
+        raise ValueError("Validation checkpoint changed")
+    for kind in ("sid", "ranker"):
+        if (
+            sha256(path(f"models/{kind}-42") / "model.pt")
+            != selection["provenance"]["models"][kind]
+        ):
+            raise ValueError("Validation baseline checkpoint changed")
     config = Config(**selection["config"])
     old_ranker, gate = load_ranker(seed), load_gate()
     rows = sample(load_rows("test"), f, 300 if natural else 1000, natural=natural)
@@ -332,6 +356,8 @@ def evaluate(seed=42, natural=False):
         requests=len(rows),
         ids=[r["id"] for r in rows],
         config=asdict(config),
+        baseline_gate=gate,
+        baseline_gate_sha256=sha256(path("models") / "fusion.json"),
         provenance=source,
         cold_model_sha256=sha256(path(f"models/coldfuse-{seed}") / "model.pt"),
         selection_sha256=sha256(path("models") / "coldfuse.json"),

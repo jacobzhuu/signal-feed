@@ -25,19 +25,34 @@ fi
 export HF_HUB_OFFLINE=1 OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1
 for seed in 42 43 44; do
   if [[ ! -f "$SIGNALFEED_HOME/models/coldfuse-$seed/train.json" ]]; then
-    .venv/bin/python -m signalfeed.cli train-cold --seed "$seed" > "$SIGNALFEED_HOME/logs/train-cold-$seed.log" 2>&1
+    .venv/bin/python -m signalfeed.cli train-cold --seed "$seed" >> "$SIGNALFEED_HOME/logs/train-cold-$seed.log" 2>&1
   fi
 done
 if [[ ! -f "$SIGNALFEED_HOME/models/coldfuse.json" ]]; then
-  .venv/bin/python -m signalfeed.cold_experiments tune > "$SIGNALFEED_HOME/logs/cold-tune.log" 2>&1
+  .venv/bin/python -m signalfeed.cold_experiments tune >> "$SIGNALFEED_HOME/logs/cold-tune.log" 2>&1
 fi
-for seed in 42 43 44; do
+evaluate_seed() {
+  local seed="$1"
   if [[ ! -f "$SIGNALFEED_HOME/reports/cold-test-$seed/metrics.json" ]]; then
-    .venv/bin/python -m signalfeed.cold_experiments evaluate --seed "$seed" > "$SIGNALFEED_HOME/logs/cold-test-$seed.log" 2>&1
+    .venv/bin/python -m signalfeed.cold_experiments evaluate --seed "$seed" >> "$SIGNALFEED_HOME/logs/cold-test-$seed.log" 2>&1
   fi
   if [[ ! -f "$SIGNALFEED_HOME/reports/cold-natural-$seed/metrics.json" ]]; then
-    .venv/bin/python -m signalfeed.cold_experiments evaluate --seed "$seed" --natural > "$SIGNALFEED_HOME/logs/cold-natural-$seed.log" 2>&1
+    .venv/bin/python -m signalfeed.cold_experiments evaluate --seed "$seed" --natural >> "$SIGNALFEED_HOME/logs/cold-natural-$seed.log" 2>&1
+  fi
+}
+pids=()
+for seed in 42 43 44; do
+  if [[ "${SIGNALFEED_COLD_PARALLEL:-0}" == 1 ]]; then
+    evaluate_seed "$seed" &
+    pids+=("$!")
+  else
+    evaluate_seed "$seed"
   fi
 done
-.venv/bin/python scripts/summarize_cold.py --run "$SIGNALFEED_HOME" > "$SIGNALFEED_HOME/logs/cold-summary.log" 2>&1
+failed=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || failed=1
+done
+if [[ "$failed" != 0 ]]; then exit 1; fi
+.venv/bin/python scripts/summarize_cold.py --run "$SIGNALFEED_HOME" >> "$SIGNALFEED_HOME/logs/cold-summary.log" 2>&1
 touch "$SIGNALFEED_HOME/completed"
