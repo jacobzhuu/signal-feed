@@ -33,6 +33,7 @@ function Card({
   const ref = useRef<HTMLElement>(null);
   const emitted = useRef(false);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const emit = async (kind: string) =>
     api("/api/events", {
       method: "POST",
@@ -104,14 +105,18 @@ function Card({
           {item.score} HN points <span className="dot">·</span> {item.reason}
         </span>
         <button
+          disabled={saving}
           aria-label={item.bookmarked ? "取消收藏" : "收藏文章"}
           className={item.bookmarked ? "saved" : ""}
           onClick={async () => {
+            setSaving(true);
             try {
               await emit(item.bookmarked ? "unbookmark" : "bookmark");
               onBookmark(item.id, !item.bookmarked);
             } catch (e) {
               setError(String(e));
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -132,19 +137,24 @@ function App() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
+  const listingSequence = useRef(0);
+  const listingUrl = useRef("/api/feed");
   const [stats, setStats] = useState<{
     impressions: number;
     ctr: number | null;
   }>();
   const load = async (url = "/api/feed") => {
+    const sequence = ++listingSequence.current;
+    listingUrl.current = url;
     setBusy(true);
     setError("");
     try {
-      setListing(await api<Listing>(url));
+      const next = await api<Listing>(url);
+      if (sequence === listingSequence.current) setListing(next);
     } catch (e) {
-      setError(String(e));
+      if (sequence === listingSequence.current) setError(String(e));
     } finally {
-      setBusy(false);
+      if (sequence === listingSequence.current) setBusy(false);
     }
   };
   useEffect(() => {
@@ -155,8 +165,12 @@ function App() {
     api<typeof stats>("/api/stats")
       .then(setStats)
       .catch(() => {});
+    return () => {
+      listingSequence.current++;
+    };
   }, []);
   const choose = async (topic: string) => {
+    const sequence = listingSequence.current;
     const next = topics.includes(topic)
       ? topics.filter((t) => t !== topic)
       : [...topics, topic];
@@ -166,10 +180,12 @@ function App() {
         body: JSON.stringify({ topics: next }),
       });
       setTopics(next);
-      setTab("feed");
-      load();
+      if (sequence === listingSequence.current) {
+        setTab("feed");
+        load();
+      }
     } catch (e) {
-      setError(String(e));
+      if (sequence === listingSequence.current) setError(String(e));
     }
   };
   return (
@@ -246,7 +262,7 @@ function App() {
             {error && (
               <div role="alert" className="empty">
                 {error}
-                <button onClick={() => load()}>重试</button>
+                <button onClick={() => load(listingUrl.current)}>重试</button>
               </div>
             )}
             {busy ? (
@@ -258,12 +274,16 @@ function App() {
                   item={item}
                   request={listing.request_id}
                   onBookmark={(id, saved) =>
-                    setListing((l) => ({
-                      ...l,
-                      items: l.items.map((i) =>
-                        i.id === id ? { ...i, bookmarked: saved } : i,
-                      ),
-                    }))
+                    setListing((l) =>
+                      l.request_id !== listing.request_id
+                        ? l
+                        : {
+                            ...l,
+                            items: l.items.map((i) =>
+                              i.id === id ? { ...i, bookmarked: saved } : i,
+                            ),
+                          },
+                    )
                   }
                 />
               ))

@@ -10,7 +10,7 @@ import httpx
 
 
 async def run():
-    url = "http://127.0.0.1:8765"
+    url = os.environ.get("SIGNALFEED_BASE_URL", "http://127.0.0.1:8765")
     result = {}
     async with httpx.AsyncClient(trust_env=False, timeout=90) as client:
         tick = time.perf_counter()

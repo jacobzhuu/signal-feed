@@ -20,6 +20,8 @@ assert browser["unexpected"] == 0 and browser["expected"] >= 2
 lines = [
     "# SignalFeed 实际运行报告",
     "",
+    "2026-10-29 Code Review 修复、重新训练/评估及指标变化见 [REVIEW_FIXES.md](REVIEW_FIXES.md) 和 `review-fix-results.json`。HN 旧在线训练指标不可作为修复后效果依据。",
+    "",
     "本报告来自已完成的真实运行。全部原始预测、权重和日志位于 `/data1/zhuzy/signalfeed`，项目内 `artifacts` 为便捷链接。",
     "",
     "## 已完成",

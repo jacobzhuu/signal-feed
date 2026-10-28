@@ -3,7 +3,7 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 90000,
   use: {
-    baseURL: "http://127.0.0.1:8766",
+    baseURL: process.env.SIGNALFEED_BASE_URL || "http://127.0.0.1:8766",
     headless: true,
     viewport: { width: 1440, height: 1000 },
   },
@@ -11,7 +11,11 @@ export default defineConfig({
     ["list"],
     [
       "json",
-      { outputFile: "/data1/zhuzy/signalfeed/reports/browser-tests.json" },
+      {
+        outputFile:
+          process.env.SIGNALFEED_BROWSER_REPORT ||
+          "test-results/browser-tests.json",
+      },
     ],
   ],
 });

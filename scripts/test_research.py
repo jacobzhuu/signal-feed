@@ -3,11 +3,14 @@
 import json
 import time
 import uuid
+import os
 from pathlib import Path
 import httpx
 
 with httpx.Client(
-    base_url="http://127.0.0.1:8766", trust_env=False, timeout=90
+    base_url=os.environ.get("SIGNALFEED_BASE_URL", "http://127.0.0.1:8766"),
+    trust_env=False,
+    timeout=90,
 ) as client:
     feed = client.get("/api/feed").json()
     item = feed["items"][0]
@@ -36,7 +39,8 @@ with httpx.Client(
             break
         time.sleep(2)
     assert runs[-1]["strategy"] in {"research-cache", "research-mind-transfer"}, runs
-    Path("/data1/zhuzy/signalfeed/reports/research-inference.json").write_text(
-        json.dumps(runs, indent=2)
-    )
+    (
+        Path(os.environ.get("SIGNALFEED_HOME", "/data1/zhuzy/signalfeed"))
+        / "reports/research-inference.json"
+    ).write_text(json.dumps(runs, indent=2))
     print(runs)

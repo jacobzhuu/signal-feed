@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 test("real HN content: exposure, bookmark persistence, search, click", async ({
   page,
   context,
-}) => {
+}, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
@@ -13,6 +13,14 @@ test("real HN content: exposure, bookmark persistence, search, click", async ({
   await page.waitForTimeout(1500);
   await first.getByRole("button", { name: "收藏文章", exact: true }).click();
   await expect(first.getByRole("button", { name: "取消收藏" })).toBeVisible();
+  await first.getByRole("button", { name: "取消收藏", exact: true }).click();
+  await expect(
+    first.getByRole("button", { name: "收藏文章", exact: true }),
+  ).toBeVisible();
+  await first.getByRole("button", { name: "收藏文章", exact: true }).click();
+  await expect(
+    first.getByRole("button", { name: "取消收藏", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "我的收藏", exact: true }).click();
   await expect(page.locator("article").first().locator(".story")).toHaveText(
     title!,
@@ -33,7 +41,7 @@ test("real HN content: exposure, bookmark persistence, search, click", async ({
   await page.locator("article").first().locator(".story").click();
   await clickRequest;
   await page.screenshot({
-    path: "/data1/zhuzy/signalfeed/reports/website.png",
+    path: testInfo.outputPath("website.png"),
     fullPage: true,
   });
   const stats = await (await page.request.get("/api/stats")).json();
@@ -41,7 +49,7 @@ test("real HN content: exposure, bookmark persistence, search, click", async ({
   expect(stats.ctr).toBeNull();
   expect(errors).toEqual([]);
 });
-test("mobile layout remains usable", async ({ page }) => {
+test("mobile layout remains usable", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.locator("article").first()).toBeVisible({ timeout: 60000 });
@@ -50,7 +58,7 @@ test("mobile layout remains usable", async ({ page }) => {
   );
   expect(overflow).toBe(false);
   await page.screenshot({
-    path: "/data1/zhuzy/signalfeed/reports/website-mobile.png",
+    path: testInfo.outputPath("website-mobile.png"),
     fullPage: true,
   });
 });

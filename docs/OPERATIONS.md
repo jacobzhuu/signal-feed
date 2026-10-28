@@ -66,3 +66,45 @@ MIND pipeline 先 prepare→encode→features，再训练；输入、码本、�
 - 未提供广告竞价/转化业务；当前能力覆盖搜索和推荐，CTR 标签来自真实内容曝光。
 
 性能策略：应用保留一个空闲连接避免每次请求关闭最后连接都触发 WAL checkpoint。可重建的返回列表日志采用 NORMAL，曝光、点击、收藏事务仍采用 FULL，后者提交会同时刷出此前的请求关联记录。断电可能丢失尚未关联真实反馈的返回日志；正常重启不会丢失。
+
+## 本轮修复后的安装、迁移与验证
+
+`requirements.lock.txt` 使用 `-e .`；`scripts/install.sh` 会先切换到脚本所属仓库根目录，再安装当前 checkout。新机器可显式选择有写权限的数据目录，例如：
+
+```bash
+SIGNALFEED_HOME="$HOME/.local/share/signalfeed" bash scripts/install.sh
+export SIGNALFEED_HOME="$HOME/.local/share/signalfeed"
+source scripts/env.sh
+```
+
+原机器的 `/data1/zhuzy/signalfeed` 默认配置保留；`SIGNALFEED_HOME` 必须在安装、服务、训练中保持一致。安装回归测试会复制源码到另一条含空格的路径，在临时虚拟环境中实际执行 editable 安装并校验导入位置；不重复下载全部 GPU 依赖。
+
+升级后重启服务，或执行 `signalfeed retrain-online`，会自动创建 `request_snapshots` 表，并在事务中将旧 `once_event` 索引迁移为仅约束 impression/click 的部分唯一索引，原有请求、事件和收藏不删除。收藏/取消收藏使用 `event_id` 幂等：**网络重试必须复用原 UUID，新的用户操作必须使用新 UUID**。服务只对成功插入的新事件修改收藏，且插入与状态修改在同一个事务中提交。
+
+旧请求缺少快照，不能补写为训练样本。旧在线模型若缺少 `data_until` 证明，自动晋升会返回 `incumbent_provenance_unavailable`；应先审计其来源，必要时按原回滚流程移除活动指针恢复内容策略，再收集新样本。不要并行执行多个在线重训/人工切换发布任务。
+
+浏览器测试可以指定独立服务地址和输出位置：
+
+```bash
+SIGNALFEED_BASE_URL=http://127.0.0.1:8767 \
+SIGNALFEED_BROWSER_REPORT=/tmp/signalfeed-browser-tests.json \
+npm --prefix frontend test
+```
+
+`benchmark.py`、`test_research.py` 同样支持 `SIGNALFEED_BASE_URL`；产物目录由 `SIGNALFEED_HOME` 决定。浏览器截图默认在 Playwright 的测试输出目录。全部点击测试仍要求独立数据库和 `SIGNALFEED_TEST_EVENTS=1`。
+
+快照保留完整浮点特征会增加请求日志体积和写入延迟。本轮未增加压缩、自动清理或新的存储系统，备份和容量管理需计入 `request_snapshots`。训练仅从不可变快照读取，不能以节省容量为由重新从当前行为重建旧特征。
+
+延迟曝光对照的可复现命令（只生成隔离的合成回归数据，不代表真实在线指标）：
+
+```bash
+source scripts/env.sh
+review_run_dir="$(mktemp -d)"
+git show 6552342:src/signalfeed/online_learning.py > "$review_run_dir/legacy.py"
+python scripts/review_online.py --output "$review_run_dir/before" \
+  --legacy-source "$review_run_dir/legacy.py"
+python scripts/review_online.py --output "$review_run_dir/after"
+# 查看两个输出目录中的 comparison.json 和模型 manifest
+```
+
+本轮 MIND 重跑使用独立的 `SIGNALFEED_HOME`：只读复用原 `mind/`、`hf/`、`models/sid-{42,43,44}`、`models/encoder`、`models/fusion.json`，将新 ranker 与 reports 写入新目录。执行三个种子的 `signalfeed train --model ranker --seed N`，无个性化 `train(personal=False)`，然后每种子 `signalfeed evaluate --seed N --retrieval-limit 1000`（默认全量排序），最后 `python scripts/summarize.py`。原产物保持不动。

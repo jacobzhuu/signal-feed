@@ -1,4 +1,3 @@
-import json
 import time
 import uuid
 import pytest
@@ -81,3 +80,50 @@ def test_cross_origin_write_rejected(client):
         ).status_code
         == 403
     )
+
+
+def test_bookmark_retries_do_not_undo_newer_transitions(client):
+    feed = client.get("/api/feed").json()
+    save = event(feed, "bookmark")
+    remove = event(feed, "unbookmark")
+    assert client.post("/api/events", json=save).json()["inserted"]
+    assert client.post("/api/events", json=remove).json()["inserted"]
+    assert not client.post("/api/events", json=save).json()["inserted"]
+    assert client.get("/api/bookmarks").json()["items"] == []
+    # A new UUID is a new user action, even on the same returned listing.
+    save_again = event(feed, "bookmark")
+    assert client.post("/api/events", json=save_again).json()["inserted"]
+    assert not client.post("/api/events", json=remove).json()["inserted"]
+    assert len(client.get("/api/bookmarks").json()["items"]) == 1
+    assert client.post("/api/events", json=event(feed, "unbookmark")).json()["inserted"]
+    assert client.get("/api/bookmarks").json()["items"] == []
+
+
+def test_existing_event_index_is_migrated_without_losing_data(client):
+    feed = client.get("/api/feed").json()
+    save = event(feed, "bookmark")
+    assert client.post("/api/events", json=save).json()["inserted"]
+    with db() as c:
+        c.execute("DROP INDEX once_exposure_click")
+        c.execute("CREATE UNIQUE INDEX once_event ON events(request_id,item_id,kind)")
+    initialize()
+    initialize()
+    assert not client.post("/api/events", json=save).json()["inserted"]
+    assert client.post("/api/events", json=event(feed, "unbookmark")).json()["inserted"]
+    assert client.post("/api/events", json=event(feed, "bookmark")).json()["inserted"]
+    with db() as c:
+        assert c.execute("SELECT count(*) FROM events").fetchone()[0] == 3
+
+
+def test_concurrent_retries_insert_and_mutate_once(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    feed = client.get("/api/feed").json()
+    body = event(feed, "bookmark")
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(
+            executor.map(lambda _: client.post("/api/events", json=body), range(8))
+        )
+    assert all(r.status_code == 200 for r in results)
+    assert sum(r.json()["inserted"] for r in results) == 1
+    assert len(client.get("/api/bookmarks").json()["items"]) == 1

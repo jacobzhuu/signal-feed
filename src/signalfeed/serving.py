@@ -111,19 +111,21 @@ class ContentService:
             self.index = {a["id"]: i for i, a in enumerate(self.items)}
             self.refresh_at = time.time()
 
-    def recommend(self, user, query="", limit=30):
+    def recommend(self, user, query="", limit=30, *, snapshot=None):
         self.refresh()
         with self.lock:
             if not self.items:
                 return []
+            created = time.time()
             with db() as c:
+                c.execute("BEGIN")
                 row = c.execute(
                     "SELECT interests FROM users WHERE id=?", (user,)
                 ).fetchone()
                 interests = json.loads(row[0]) if row else []
                 hist = c.execute(
-                    "SELECT item_id,MAX(created) stamp FROM events WHERE user_id=? AND kind IN ('click','bookmark') GROUP BY item_id ORDER BY stamp DESC LIMIT 20",
-                    (user,),
+                    "SELECT item_id,MAX(created) stamp FROM events WHERE user_id=? AND created<=? AND kind IN ('click','bookmark') GROUP BY item_id ORDER BY stamp DESC,item_id LIMIT 20",
+                    (user, created),
                 ).fetchall()
                 bookmarks = {
                     r[0]
@@ -141,9 +143,9 @@ class ContentService:
                             f"JOIN events e2 ON e1.user_id=e2.user_id "
                             f"WHERE e1.item_id IN ({placeholders}) AND e1.user_id<>? "
                             "AND e1.kind IN ('click','bookmark') AND e2.kind IN ('click','bookmark') "
-                            "AND e1.is_test=0 AND e2.is_test=0 GROUP BY e2.item_id "
+                            "AND e1.is_test=0 AND e2.is_test=0 AND e1.created<=? AND e2.created<=? GROUP BY e2.item_id "
                             "ORDER BY COUNT(DISTINCT e2.user_id) DESC LIMIT 100",
-                            (*history_ids, user),
+                            (*history_ids, user, created, created),
                         ).fetchall()
                     )
                 lexical = []
@@ -165,7 +167,7 @@ class ContentService:
             affinity = self.vectors @ profile
             fresh = np.array(
                 [
-                    np.exp(-max(0, time.time() - a["published"]) / 86400 / 3)
+                    np.exp(-max(0, created - a["published"]) / 86400 / 3)
                     for a in self.items
                 ]
             )
@@ -197,11 +199,13 @@ class ContentService:
                     from .online_learning import online_matrix
 
                     ids = np.argsort(-scores)[:100]
+                    ranking_features = online_matrix(self.vectors, ids, hi[::-1])
                     with torch.inference_mode():
                         rank_scores = self.online_ranker(
-                            torch.from_numpy(online_matrix(self.vectors, ids, hi[::-1]))
+                            torch.from_numpy(ranking_features)
                         ).numpy()
                     order = ids[np.argsort(-rank_scores)][:limit]
+                    feature_rows = dict(zip(ids, ranking_features))
                     self.version = "online-" + self.online_version
                 else:
                     order = np.argsort(-scores)[:limit]
@@ -209,6 +213,32 @@ class ContentService:
                     self.online_version = None
                     self.online_ranker = None
                 reason = "根据阅读兴趣推荐" if hi or interests else "近期热门技术资讯"
+                if snapshot is not None:
+                    from .online_learning import FEATURE_VERSION, online_matrix
+
+                    saved_features = (
+                        np.stack([feature_rows[i] for i in order])
+                        if active is not None
+                        else online_matrix(self.vectors, order, hi[::-1])
+                    )
+                    snapshot.update(
+                        created=created,
+                        feature_version=FEATURE_VERSION,
+                        model_version=self.version,
+                        history=[self.items[i]["id"] for i in hi[::-1]],
+                        interests=interests,
+                        # Scores include interests, popularity, freshness, CF
+                        # and read penalties, frozen before feedback arrives.
+                        content_scores={
+                            self.items[i]["id"]: float(scores[i]) for i in order
+                        },
+                        features=dict(
+                            zip(
+                                [self.items[i]["id"] for i in order],
+                                saved_features.tolist(),
+                            )
+                        ),
+                    )
             return [
                 {
                     **self.items[i],

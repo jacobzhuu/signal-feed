@@ -12,7 +12,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS article_fts USING fts5(id UNINDEXED,title,dom
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,interests TEXT NOT NULL DEFAULT '[]');
 CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,created REAL NOT NULL,strategy TEXT NOT NULL,model_version TEXT NOT NULL,items TEXT NOT NULL,query TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,request_id TEXT NOT NULL,user_id TEXT NOT NULL,item_id TEXT NOT NULL,kind TEXT NOT NULL,position INTEGER NOT NULL,created REAL NOT NULL,is_test INTEGER NOT NULL DEFAULT 0);
-CREATE UNIQUE INDEX IF NOT EXISTS once_event ON events(request_id,item_id,kind);
+CREATE TABLE IF NOT EXISTS request_snapshots(request_id TEXT PRIMARY KEY REFERENCES requests(id),payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS user_events ON events(user_id,created);
 CREATE INDEX IF NOT EXISTS item_events ON events(item_id,kind,user_id);
 CREATE TABLE IF NOT EXISTS bookmarks(user_id TEXT NOT NULL,item_id TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(user_id,item_id));
@@ -47,3 +47,11 @@ def connection():
 def initialize():
     with db() as c:
         c.executescript(SCHEMA)
+        # Migrate the old index without discarding existing events. Bookmark
+        # transitions deduplicate by event UUID; impressions/clicks also by item.
+        c.execute("BEGIN IMMEDIATE")
+        c.execute("DROP INDEX IF EXISTS once_event")
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS once_exposure_click "
+            "ON events(request_id,item_id,kind) WHERE kind IN ('impression','click')"
+        )

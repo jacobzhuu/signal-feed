@@ -95,10 +95,13 @@ def health():
 
 
 def listing(request, query="", limit=30, research=False):
-    rows = service.recommend(request.state.user, query, limit)
+    snapshot = {}
+    rows = service.recommend(request.state.user, query, limit, snapshot=snapshot)
     rid = uuid.uuid4().hex
     strategy = "hybrid-search-v1" if query else "content-v1"
-    model_version = service.version
+    model_version = snapshot.get("model_version", service.version)
+    if not query:
+        strategy = model_version
     if research:
         from .experimental import recommend
 
@@ -128,13 +131,18 @@ def listing(request, query="", limit=30, research=False):
             (
                 rid,
                 request.state.user,
-                time.time(),
+                snapshot.get("created", time.time()),
                 strategy,
                 model_version,
                 json.dumps([r["id"] for r in rows]),
                 query,
             ),
         )
+        if snapshot and not query and not research:
+            c.execute(
+                "INSERT INTO request_snapshots VALUES(?,?)",
+                (rid, json.dumps(snapshot)),
+            )
     return dict(
         request_id=rid,
         strategy=strategy,
@@ -192,12 +200,12 @@ def event(body: Event, request: Request):
             ),
         )
         inserted = bool(cur.rowcount)
-        if body.kind == "bookmark":
+        if inserted and body.kind == "bookmark":
             c.execute(
                 "INSERT OR IGNORE INTO bookmarks VALUES(?,?,?)",
                 (uid, body.item_id, now),
             )
-        elif body.kind == "unbookmark":
+        elif inserted and body.kind == "unbookmark":
             c.execute(
                 "DELETE FROM bookmarks WHERE user_id=? AND item_id=?",
                 (uid, body.item_id),
