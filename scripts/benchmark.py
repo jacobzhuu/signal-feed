@@ -21,6 +21,7 @@ async def run():
         httpx.AsyncClient(base_url=url, trust_env=False, timeout=90) for _ in range(16)
     ]
     start = time.perf_counter()
+    profiles = []
     try:
         health = (await clients[0].get("/api/health")).json()
         if not health.get("test_events"):
@@ -28,19 +29,23 @@ async def run():
                 "Benchmark requires SIGNALFEED_TEST_EVENTS=1 on an isolated server"
             )
         for i, client in enumerate(clients):
+            topics, history = [], []
             r = await client.get("/api/interests")
             r.raise_for_status()
             if i % 3:
+                topics = ["Artificial Intelligence" if i % 2 else "Security"]
                 r = await client.put(
                     "/api/interests",
-                    json={
-                        "topics": ["Artificial Intelligence" if i % 2 else "Security"]
-                    },
+                    json={"topics": topics},
                 )
                 r.raise_for_status()
             if i % 3 == 2:
                 feed = (await client.get("/api/feed")).json()
-                for item in feed["items"][:5]:
+                items = feed["items"]
+                chosen = [
+                    items[(i * 7 + j) % len(items)] for j in range(min(5, len(items)))
+                ]
+                for item in chosen:
                     r = await client.post(
                         "/api/events",
                         json={
@@ -52,11 +57,17 @@ async def run():
                         },
                     )
                     r.raise_for_status()
+                    history.append(item["id"])
+            profiles.append(dict(client=i, topics=topics, history=history))
         result = {
             "run_id": root.name,
             "provenance": code_identity(),
             "preparation_seconds": time.perf_counter() - start,
             "users": len(clients),
+            "profiles": profiles,
+            "unique_profiles": len(
+                {json.dumps([p["topics"], p["history"]]) for p in profiles}
+            ),
             "health_before": health,
             "loads": {},
         }
@@ -74,17 +85,24 @@ async def run():
             semaphore = asyncio.Semaphore(concurrency)
             latencies, event_latencies, errors = [], [], []
             statuses = {}
+            client_methods = [dict(feed=0, search=0) for _ in clients]
 
             async def request(i):
                 async with semaphore:
                     client = clients[i % len(clients)]
+                    # Alternate by complete client rounds, not parity of the
+                    # client ID: every cohort must exercise both endpoints.
+                    search = (i // len(clients)) % 2 == 1
+                    client_methods[i % len(clients)][
+                        "search" if search else "feed"
+                    ] += 1
                     tick = time.perf_counter()
                     try:
                         response = (
                             await client.get(
                                 "/api/search", params={"q": queries[i % len(queries)]}
                             )
-                            if i % 2
+                            if search
                             else await client.get(feed_url)
                         )
                         response.raise_for_status()
@@ -123,10 +141,11 @@ async def run():
                 else None,
                 "errors": errors,
                 "statuses": statuses,
+                "client_methods": client_methods,
             }
         result["health_after"] = (await clients[0].get("/api/health")).json()
         result["note"] = (
-            "Isolated test service; mixed cold/interest/warm users, search/feed, request snapshots and test exposure writes. Shared host; not production capacity."
+            "Isolated test service; every client exercises search and feed; distinct rotated warm histories; stable profiles favor cache reuse. Request snapshots and test exposure writes included. Shared host with concurrent offline evaluations; not production capacity."
         )
         (
             root / "reports" / ("cold_latency.json" if cold else "latency.json")

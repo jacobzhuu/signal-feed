@@ -206,11 +206,11 @@ def test_cache_key_binds_every_request_input():
         assert cache_key(dict(payload, **{field: value}), "v1") != key
 
 
-def _stall(connection):
+def _stall(connection, version):
     time.sleep(10)
 
 
-def _echo_worker(connection):
+def _echo_worker(connection, version):
     while True:
         payload = connection.recv()
         time.sleep(0.05)
@@ -235,6 +235,18 @@ def test_completed_worker_survives_idle_and_reuses_process(monkeypatch):
         assert worker.recommend(dict(value=1))[1] == "cache"
         assert worker.recommend(dict(value=2))[0] == dict(value=2)
         assert worker._process is process
+        from concurrent.futures import ThreadPoolExecutor
+
+        def slow_identity():
+            time.sleep(0.03)
+            return "test"
+
+        monkeypatch.setattr(worker, "model_identity", slow_identity)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            replies = list(
+                pool.map(lambda _: worker.recommend(dict(value=1)), range(16))
+            )
+        assert all(status == "cache" for _, status, _ in replies)
     finally:
         worker.shutdown()
 

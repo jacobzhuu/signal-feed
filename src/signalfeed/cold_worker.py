@@ -41,7 +41,7 @@ def cache_key(payload, version):
     return h.hexdigest()
 
 
-def _worker(connection):
+def _worker(connection, expected_version):
     try:
         import torch
         from threadpoolctl import threadpool_limits
@@ -60,6 +60,8 @@ def _worker(connection):
             if gate.exists()
             else Config()
         )
+        if model_identity() != expected_version:
+            raise ValueError("Model publication changed while loading")
         catalog_key, codes = None, None
         while True:
             payload = connection.recv()
@@ -89,7 +91,7 @@ def _stop():
     global _process, _connection, _pending, _timer, _version
     if _timer is not None:
         _timer.cancel()
-    if _process is not None:
+    if _process is not None and _process.pid is not None:
         if _process.is_alive():
             _process.terminate()
         _process.join(0.2)
@@ -147,47 +149,54 @@ def shutdown():
 
 def recommend(payload, timeout=2):
     global _process, _connection, _pending, _timer, _version
-    if not _lock.acquire(blocking=False):
-        return None, "busy-fallback", None
     try:
         version = model_identity()
         key = cache_key(payload, version)
-        if _version is not None and _version != version:
-            _stop()
-            _cache.clear()
-        _collect()
-        now = time.monotonic()
-        if key in _cache and now - _cache[key][0] < 300:
-            return _cache[key][1], "cache", version
-        if _pending is not None:
-            return None, "busy-fallback", version
-        if _process is None or not _process.is_alive():
-            _stop()
-            context = multiprocessing.get_context("spawn")
-            _connection, child = context.Pipe()
-            _process = context.Process(target=_worker, args=(child,), daemon=True)
-            _process.start()
-            child.close()
-            _version = version
-        if len(_cache) >= 128:
-            _cache.pop(next(iter(_cache)))
-        job = dict(key=key, done=threading.Event())
-        _pending = job
-        _timer = threading.Timer(MAX_RUNTIME, _expire, args=(job,))
-        _timer.daemon = True
-        _timer.start()
-
-        threading.Thread(
-            target=_exchange, args=(_connection, payload, job), daemon=True
-        ).start()
-        if job["done"].wait(min(timeout, MAX_RUNTIME)):
+    except Exception:
+        return None, "unavailable-fallback", None
+    # Hashing and inference waits are outside this short critical section.
+    # A cached result must not be rejected just because another key is loading.
+    with _lock:
+        try:
+            if _version is not None and _version != version:
+                _stop()
+                _cache.clear()
             _collect()
-            if key in _cache:
+            now = time.monotonic()
+            if key in _cache and now - _cache[key][0] < 300:
+                return _cache[key][1], "cache", version
+            if _pending is not None:
+                return None, "busy-fallback", version
+            if _process is None or not _process.is_alive():
+                _stop()
+                context = multiprocessing.get_context("spawn")
+                _connection, child = context.Pipe()
+                _process = context.Process(
+                    target=_worker, args=(child, version), daemon=True
+                )
+                try:
+                    _process.start()
+                finally:
+                    child.close()
+                _version = version
+            if len(_cache) >= 128:
+                _cache.pop(next(iter(_cache)))
+            job = dict(key=key, done=threading.Event())
+            _pending = job
+            _timer = threading.Timer(MAX_RUNTIME, _expire, args=(job,))
+            _timer.daemon = True
+            _timer.start()
+
+            threading.Thread(
+                target=_exchange, args=(_connection, payload, job), daemon=True
+            ).start()
+        except Exception:
+            _stop()
+            return None, "unavailable-fallback", version
+    if job["done"].wait(min(timeout, MAX_RUNTIME)):
+        with _lock:
+            _collect()
+            if key in _cache and _version == version:
                 return _cache[key][1], "research", version
             return None, "model-error-fallback", version
-        return None, "timeout-fallback", version
-    except Exception:
-        _stop()
-        return None, "unavailable-fallback", None
-    finally:
-        _lock.release()
+    return None, "timeout-fallback", version
