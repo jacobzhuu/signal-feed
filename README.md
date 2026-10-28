@@ -68,6 +68,8 @@ flowchart LR
 
 没有使用 MiniOneRec GPR 分支中的模拟价值/模拟行为作为实验标签。
 
+首轮 ColdFuse 三种子实验已经完成并独立复算，未证实优于内容基线；因此保留为实验入口。完整负面结果、消融与限制见 [结果解读](docs/COLDFUSE_ANALYSIS.md)。
+
 ## 训练与评测
 
 ```bash
