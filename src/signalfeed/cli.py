@@ -83,10 +83,17 @@ def tune_fusion(seed: int = 42):
 
 
 @app.command()
-def retrain_online():
+def retrain_online(cold: bool = False):
     from .online_learning import retrain
 
-    retrain()
+    retrain(cold=cold)
+
+
+@app.command()
+def train_cold(seed: int = 42, limit: int = 30000, epochs: int = 3):
+    from .cold_training import train
+
+    train(seed, limit, epochs)
 
 
 @app.command()
@@ -119,7 +126,7 @@ def bind_offline(attestation: str):
 
 
 @app.command()
-def activate_online(version: str = ""):
+def activate_online(version: str = "", cold: bool = False):
     """Validated rollback/publication, serialized with training. Empty restores content."""
     import json
     from .settings import path
@@ -130,7 +137,10 @@ def activate_online(version: str = ""):
     import torch
     from .ranker import Ranker
 
-    root = path("online-models")
+    if cold:
+        from .coldfuse import CONTRACT
+
+    root = path("cold-online-models" if cold else "online-models")
     with publication_lock(root):
         pointer = root / "active.json"
         if not version:

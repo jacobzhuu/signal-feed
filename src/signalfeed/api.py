@@ -59,6 +59,9 @@ async def lifespan(app):
     from .experimental import shutdown
 
     await asyncio.to_thread(shutdown)
+    from .cold_worker import shutdown as cold_shutdown
+
+    await asyncio.to_thread(cold_shutdown)
     anchor.close()
 
 
@@ -125,9 +128,14 @@ def ready(response: Response):
     return state
 
 
-def listing(request, query="", limit=30, research=False):
+def listing(request, query="", limit=30, research=False, cold=False):
     snapshot = {}
-    rows = service.recommend(request.state.user, query, limit, snapshot=snapshot)
+    if cold:
+        from .cold_serving import recommend
+
+        rows = recommend(service, request.state.user, limit, snapshot)
+    else:
+        rows = service.recommend(request.state.user, query, limit, snapshot=snapshot)
     rid = uuid.uuid4().hex
     strategy = "hybrid-search-v1" if query else "content-v1"
     model_version = snapshot.get("model_version", service.version)
@@ -178,13 +186,16 @@ def listing(request, query="", limit=30, research=False):
         request_id=rid,
         strategy=strategy,
         model_version=model_version,
+        experiment=snapshot.get("coldfuse"),
         items=[{**r, "position": i} for i, r in enumerate(rows)],
     )
 
 
 @app.get("/api/feed")
-def feed(request: Request, research: bool = False):
-    return listing(request, research=research)
+def feed(request: Request, research: bool = False, cold: bool = False):
+    if research and cold:
+        raise HTTPException(422, "Choose one experiment")
+    return listing(request, research=research, cold=cold)
 
 
 @app.get("/api/search")
@@ -316,7 +327,7 @@ def stats():
                 "FROM requests r JOIN events e ON e.request_id=r.id AND e.user_id=r.user_id "
                 "WHERE r.created+?<=? AND e.created>=r.created AND e.created<r.created+? "
                 "AND e.is_test=0 AND e.kind IN ('impression','click') AND r.query='' "
-                "AND (r.strategy='content-v1' OR r.strategy LIKE 'online-%') "
+                "AND (r.strategy='content-v1' OR r.strategy LIKE 'online-%' OR r.strategy LIKE 'coldfuse-%') "
                 "GROUP BY r.id,e.item_id) "
                 "SELECT strategy,model_version,COUNT(*) impressions,SUM(clicked) clicked_impressions, "
                 "SUM(viewable) viewable_impressions,SUM(NOT viewable) click_inferred_exposures "

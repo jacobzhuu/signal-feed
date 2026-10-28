@@ -22,7 +22,7 @@ from .snapshots import unpack
 from .publication import publication_lock, atomic_json
 
 
-def feedback_records(now, max_exposures=50000):
+def feedback_records(now, max_exposures=50000, *, cold=False):
     """Stream only requests with feedback; retain bounded complete request groups.
 
     A valid click proves exposure even if the one-second view event never arrives.
@@ -48,10 +48,15 @@ def feedback_records(now, max_exposures=50000):
                     (rid,),
                 )
             ]
-            if request["query"] or not (
-                request["strategy"] == "content-v1"
-                or request["strategy"].startswith("online-")
-            ):
+            feed = (
+                request["strategy"].startswith("coldfuse-")
+                if cold
+                else (
+                    request["strategy"] == "content-v1"
+                    or request["strategy"].startswith("online-")
+                )
+            )
+            if request["query"] or not feed:
                 excluded["non_feed"] += sum(e["kind"] == "impression" for e in events)
                 continue
             if not request["payload"]:
@@ -61,8 +66,11 @@ def feedback_records(now, max_exposures=50000):
                 continue
             try:
                 snapshot = unpack(request["payload"])
+                from .coldfuse import FEATURE_VERSION as COLD_FEATURE_VERSION
+
                 compatible = (
-                    snapshot.get("feature_version") == FEATURE_VERSION
+                    snapshot.get("feature_version")
+                    == (COLD_FEATURE_VERSION if cold else FEATURE_VERSION)
                     and snapshot.get("created") == start
                     and snapshot.get("model_version") == request["model_version"]
                 )
@@ -231,25 +239,31 @@ def compare_policies(valid, candidate_scores, incumbent_scores, diagnostics=None
     return a, b, len(candidate_metrics), promote, predictions
 
 
-def retrain(min_exposures=1000, min_clicks=50):
-    with publication_lock(path("online-models")):
-        return _retrain(min_exposures, min_clicks)
+def retrain(min_exposures=1000, min_clicks=50, *, cold=False):
+    with publication_lock(path("cold-online-models" if cold else "online-models")):
+        return _retrain(min_exposures, min_clicks, cold=cold)
 
 
-def _retrain(min_exposures=1000, min_clicks=50):
+def _retrain(min_exposures=1000, min_clicks=50, *, cold=False):
     from .serving import ContentService
 
     initialize()
+    from . import coldfuse
+
+    contract = coldfuse.CONTRACT if cold else CONTRACT
+    scoring = coldfuse.policy_scores if cold else policy_scores
+    directory = "cold-online-models" if cold else "online-models"
 
     def finish(result):
-        (path("reports") / "online_retrain.json").write_text(
-            json.dumps(result, indent=2)
-        )
+        (
+            path("reports")
+            / ("cold_online_retrain.json" if cold else "online_retrain.json")
+        ).write_text(json.dumps(result, indent=2))
         print(result)
         return result
 
     now = time.time()
-    records, excluded = feedback_records(now)
+    records, excluded = feedback_records(now, cold=cold)
     summary = dict(
         mature_exposures=len(records),
         positive_exposures=sum(r[2] for r in records),
@@ -261,20 +275,22 @@ def _retrain(min_exposures=1000, min_clicks=50):
     if len(records) < min_exposures or summary["positive_exposures"] < min_clicks:
         return finish(dict(status="insufficient_real_feedback", **summary))
 
-    pointer = path("online-models") / "active.json"
+    pointer = path(directory) / "active.json"
     pointer_before = pointer.read_bytes() if pointer.exists() else None
     service = ContentService()
-    incumbent = service.active_ranker()
+    incumbent = (
+        service._active_ranker(contract, directory) if cold else service.active_ranker()
+    )
     incumbent_manifest = (
         json.loads(pointer_before) if pointer_before and incumbent is not None else {}
     )
     if pointer_before and (
         incumbent is None
-        or incumbent_manifest.get("feature_version") != FEATURE_VERSION
+        or incumbent_manifest.get("feature_version") != contract["feature_version"]
         or not isinstance(incumbent_manifest.get("data_until"), (int, float))
     ):
         return finish(dict(status="incumbent_provenance_unavailable", **summary))
-    ledger = path("online-models") / "validation.json"
+    ledger = path(directory) / "validation.json"
     used_until = (
         json.loads(ledger.read_text())["consumed_until"] if ledger.exists() else None
     )
@@ -321,14 +337,14 @@ def _retrain(min_exposures=1000, min_clicks=50):
     model.eval()
     vx = torch.tensor(np.stack([r[1] for r in valid]))
     content = np.array([r[0]["content_score"] for r in valid])
-    scores = policy_scores(model, vx.numpy(), content)
-    baseline = policy_scores(incumbent, vx.numpy(), content)
+    scores = scoring(model, vx.numpy(), content)
+    baseline = scoring(incumbent, vx.numpy(), content)
     diagnostics = {}
     a, b, nvalid, promoted, predictions = compare_policies(
         valid, scores, baseline, diagnostics
     )
     version = str(time.time_ns())
-    dest = path(f"online-models/{version}")
+    dest = path(f"{directory}/{version}")
     torch.save(model.state_dict(), dest / "model.pt")
     model_hash = hashlib.sha256((dest / "model.pt").read_bytes()).hexdigest()
     pointer_now = pointer.read_bytes() if pointer.exists() else None
@@ -337,7 +353,7 @@ def _retrain(min_exposures=1000, min_clicks=50):
     report = dict(
         status="promoted" if promoted else "kept_for_research",
         version=version,
-        **CONTRACT,
+        **contract,
         promotion_diagnostics=diagnostics,
         model_sha256=model_hash,
         **summary,

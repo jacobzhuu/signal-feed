@@ -78,3 +78,7 @@ MIND 为历史日志实验；HN 没有真实成熟反馈时不宣称线上收益
 ## 可复现性
 
 运行 scripts/run_experiments.sh 后，使用 scripts/verify.py 和 scripts/benchmark.py 写入同一独立 SIGNALFEED_HOME，再运行 `python scripts/write_report.py --run <目录>`。报告拒绝混合源码、运行或被修改的预测。
+
+## ColdFuse 实现阶段更新
+
+ColdFuse 共享核心、网站实验入口、独立 DNN 特征契约、成熟真实反馈训练路径及完整实验执行器现已实现。初步工程验收为 Python 48 项、浏览器 10 项、构建/Ruff 通过；真实 HN 目录上的缺模型回退与点击后更新已验证。新增代码尚没有冷启动实验结果，不能将上文基线数字当作 ColdFuse 收益。下一阶段使用独立 `coldfuse-v1` 目录，按设计协议运行并保留所有正负结果。

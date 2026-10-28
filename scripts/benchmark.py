@@ -14,6 +14,8 @@ from signalfeed.provenance import code_identity
 async def run():
     url = os.environ.get("SIGNALFEED_BASE_URL", "http://127.0.0.1:8767")
     root = Path(os.environ["SIGNALFEED_HOME"])
+    cold = os.environ.get("SIGNALFEED_BENCH_COLD") == "1"
+    feed_url = "/api/feed?cold=true" if cold else "/api/feed"
     root.joinpath("reports").mkdir(parents=True, exist_ok=True)
     clients = [
         httpx.AsyncClient(base_url=url, trust_env=False, timeout=90) for _ in range(16)
@@ -71,6 +73,7 @@ async def run():
         for concurrency in [1, 8, 32]:
             semaphore = asyncio.Semaphore(concurrency)
             latencies, event_latencies, errors = [], [], []
+            statuses = {}
 
             async def request(i):
                 async with semaphore:
@@ -82,10 +85,12 @@ async def run():
                                 "/api/search", params={"q": queries[i % len(queries)]}
                             )
                             if i % 2
-                            else await client.get("/api/feed")
+                            else await client.get(feed_url)
                         )
                         response.raise_for_status()
                         data = response.json()
+                        status = (data.get("experiment") or {}).get("status", "search")
+                        statuses[status] = statuses.get(status, 0) + 1
                         latencies.append((time.perf_counter() - tick) * 1000)
                         if i % 4 == 0 and data["items"]:
                             item = data["items"][0]
@@ -117,12 +122,15 @@ async def run():
                 if event_latencies
                 else None,
                 "errors": errors,
+                "statuses": statuses,
             }
         result["health_after"] = (await clients[0].get("/api/health")).json()
         result["note"] = (
             "Isolated test service; mixed cold/interest/warm users, search/feed, request snapshots and test exposure writes. Shared host; not production capacity."
         )
-        (root / "reports/latency.json").write_text(json.dumps(result, indent=2))
+        (
+            root / "reports" / ("cold_latency.json" if cold else "latency.json")
+        ).write_text(json.dumps(result, indent=2))
         print(json.dumps(result, indent=2))
         if any(x["errors"] for x in result["loads"].values()):
             raise RuntimeError("Benchmark requests failed; inspect saved evidence")

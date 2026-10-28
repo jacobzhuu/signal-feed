@@ -44,8 +44,8 @@ class ContentService:
         with self.lock:
             return self._active_ranker()
 
-    def _active_ranker(self):
-        active = path("online-models") / "active.json"
+    def _active_ranker(self, contract=None, directory="online-models"):
+        active = path(directory) / "active.json"
         if not active.exists():
             self.online_ranker = self.online_version = self.bundle_key = None
             self.load_error = None
@@ -55,8 +55,10 @@ class ContentService:
             from .ranker import Ranker
             from .online_schema import CONTRACT
 
+            expected = CONTRACT if contract is None else contract
+
             manifest = json.loads(active.read_text())
-            if any(manifest.get(k) != v for k, v in CONTRACT.items()):
+            if any(manifest.get(k) != v for k, v in expected.items()):
                 raise ValueError(
                     "Incompatible online model/feature/encoder/policy contract"
                 )
@@ -67,7 +69,7 @@ class ContentService:
                 raise ValueError("Invalid bundle version")
             key = (version, manifest["model_sha256"])
             if self.bundle_key != key:
-                payload = (path("online-models") / version / "model.pt").read_bytes()
+                payload = (path(directory) / version / "model.pt").read_bytes()
                 if hashlib.sha256(payload).hexdigest() != manifest["model_sha256"]:
                     raise ValueError("Published model checksum mismatch")
                 candidate = Ranker()

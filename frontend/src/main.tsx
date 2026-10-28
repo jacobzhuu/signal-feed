@@ -12,7 +12,7 @@ type Article = {
   position: number;
   reason: string;
 };
-type Listing = { request_id: string; items: Article[] };
+type Listing = { request_id: string; items: Article[]; experiment?: {status: string} };
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
@@ -207,8 +207,9 @@ function App() {
           revision === interestRevision.current &&
           sequence === listingSequence.current
         ) {
-          setTab("feed");
-          await load();
+          const cold = listingUrl.current === "/api/feed?cold=true";
+          setTab(cold ? "cold" : "feed");
+          await load(cold ? "/api/feed?cold=true" : "/api/feed");
         }
       } catch (e) {
         if (revision === interestRevision.current) {
@@ -243,6 +244,16 @@ function App() {
             }}
           >
             发现
+          </button>
+          <button
+            className={tab === "cold" ? "active" : ""}
+            onClick={() => {
+              setTab("cold");
+              setQ("");
+              load("/api/feed?cold=true");
+            }}
+          >
+            兴趣加速（实验）
           </button>
           <button
             className={tab === "bookmarks" ? "active" : ""}
@@ -291,12 +302,18 @@ function App() {
                   ? "你的收藏"
                   : tab === "search"
                     ? `搜索：${q}`
+                    : tab === "cold" ? "兴趣加速"
                     : "为你发现"}
               </h2>
               <span>
                 {busy ? "正在加载…" : `${listing.items.length} 篇资讯`}
               </span>
             </div>
+            {tab === "cold" && <div className="panel" role="status">
+              <p>从兴趣和最近阅读开始，逐步调整推荐。这是实验功能，尚未验证实际效果。</p>
+              {listing.experiment?.status.includes("fallback") && <p>加速模型准备中，当前按兴趣与热度推荐。</p>}
+              <button disabled={busy} onClick={() => load("/api/feed?cold=true")}>根据最新阅读更新</button>
+            </div>}
             {error && (
               <div role="alert" className="empty">
                 {error}
