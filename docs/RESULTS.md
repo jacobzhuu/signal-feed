@@ -1,5 +1,7 @@
 # SignalFeed 修复后实际运行结果（2026-10-29）
 
+> 当前正在进行下一轮完整审计修复及 ColdFuse 开发，进度见 [AGENT_PROGRESS.md](AGENT_PROGRESS.md)。下文为 `6617c02` 阶段的历史结果，不代表正在修改的代码已经通过验证。新一轮已确认原去生成消融同时改变热门权重，因此其差值不能单独归因于生成模块；新实验完成前不替换或虚构结果。
+
 本轮完成五项 Code Review 修复，未开发 ColdFuse、未新增推荐模型。根因、修改文件、测试、时间边界与剩余风险见 [修复报告](REVIEW_FIXES.md)。机器可读对比见 [review-fix-results.json](review-fix-results.json)，新 MIND 汇总见 [results.json](results.json)。
 
 修复前基线为 `6552342`，修复前后产物隔离在 `artifacts/review-fix/before`、`artifacts/review-fix/after`。下列指标来自本轮实际重跑，不将旧在线指标沿用为修复后结果。
