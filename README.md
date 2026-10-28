@@ -23,6 +23,8 @@ bash scripts/start.sh           # 后端同时提供构建后的前端
 # 停止：bash scripts/stop.sh
 ```
 
+本机 ColdFuse 完整部署使用 `SIGNALFEED_HOME=/data1/zhuzy/signalfeed/coldfuse-live` 和原始 `SIGNALFEED_DB=/data1/zhuzy/signalfeed/online.sqlite`，具体启停与测试隔离见 [运维说明](docs/OPERATIONS.md)。
+
 开发前端：`cd frontend && npm run dev`，API 仍运行在 8765。默认本机绑定，不需要云服务、付费 API 或账号。
 
 ## 架构

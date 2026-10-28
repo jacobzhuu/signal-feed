@@ -353,15 +353,24 @@ def test_cold_api_feedback_snapshot_and_missing_model_fallback(online_env, monke
         assert client.get("/api/feed?cold=true&research=true").status_code == 422
 
 
-def test_separate_cold_feedback_training_contract(online_env):
+def test_separate_cold_feedback_training_contract(online_env, monkeypatch):
     from test_online import seed_feedback
     from signalfeed.online_learning import retrain
+    from signalfeed.serving import ContentService
+    import signalfeed.cold_serving as serving
 
     now = seed_feedback(150)
+    vectors = np.eye(384, dtype="float32")[:7]
+    features = matrix(vectors, [0, 1], state(vectors, list(range(2, 7))))
+    monkeypatch.setattr(serving, "online", ContentService())
     with db() as c:
         for row in list(c.execute("SELECT request_id,payload FROM request_snapshots")):
             snap = json.loads(row["payload"])
             snap.update(CONTRACT, model_version="coldfuse-test")
+            snap["features"] = {str(i): features[i].tolist() for i in (0, 1)}
+            # A slight wrong baseline ordering can be corrected by the bounded
+            # DNN blend; unlike an artificial 0-versus-1 gap it is surmountable.
+            snap["content_scores"] = {"0": 0.499, "1": 0.5}
             c.execute(
                 "UPDATE request_snapshots SET payload=? WHERE request_id=?",
                 (json.dumps(snap), row["request_id"]),
@@ -373,8 +382,10 @@ def test_separate_cold_feedback_training_contract(online_env):
     assert now < time.time()
     result = retrain(100, 20, cold=True)
     assert result["feature_version"] == CONTRACT["feature_version"]
-    assert result["status"] in ("promoted", "kept_for_research")
+    assert result["status"] == "promoted"
     assert (
         online_env("cold-online-models") / result["version"] / "manifest.json"
     ).exists()
     assert not (online_env("online-models") / "active.json").exists()
+    assert serving.active_ranker() is not None
+    assert serving.online.online_version == result["version"]

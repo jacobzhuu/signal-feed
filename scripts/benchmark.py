@@ -145,7 +145,7 @@ async def run():
             }
         result["health_after"] = (await clients[0].get("/api/health")).json()
         result["note"] = (
-            "Isolated test service; every client exercises search and feed; distinct rotated warm histories; stable profiles favor cache reuse. Request snapshots and test exposure writes included. Shared host with concurrent offline evaluations; not production capacity."
+            "Isolated test service; every client exercises search and feed; distinct rotated warm histories; stable profiles favor cache reuse. Request snapshots and test exposure writes included. Shared host; co-located work may affect latency; not production capacity."
         )
         (
             root / "reports" / ("cold_latency.json" if cold else "latency.json")
