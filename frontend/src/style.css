@@ -297,6 +297,20 @@ h3 {
   display: block;
   margin: 20px auto;
 }
+.experiment-note button {
+  padding: 8px 12px;
+  border: 1px solid #b9cbbd;
+  border-radius: 6px;
+  background: #eef4ee;
+  color: #315f4b;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.experiment-note button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
 footer {
   border-top: 1px solid #dce3dc;
   padding: 28px 6%;

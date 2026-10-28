@@ -69,8 +69,8 @@ def recommend(service, user, limit, snapshot):
     cf_scores = np.array([cf.get(a["id"], 0) for a in items], dtype="float32")
     core = ColdFuse(x, popularity)
     result = core.recommend(h, eligible, explicit, cf_scores=cf_scores)
-    status, model_id = "empty-catalog", None
-    if items:
+    status, model_id = ("no-personal-signal" if items else "empty-catalog"), None
+    if items and (h or explicit.any()):
         from .cold_worker import recommend as research
 
         payload = dict(
@@ -117,9 +117,9 @@ def recommend(service, user, limit, snapshot):
         {
             **items[i],
             "bookmarked": items[i]["id"] in saved,
-            "reason": "兴趣加速 · 实验推荐"
-            if "fallback" not in status
-            else "兴趣推荐 · 加速准备中",
+            "reason": "近期热门技术资讯"
+            if status == "no-personal-signal"
+            else ("根据兴趣推荐" if "fallback" in status else "兴趣加速 · 实验推荐"),
         }
         for i in selected
     ]

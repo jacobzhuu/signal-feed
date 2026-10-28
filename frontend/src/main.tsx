@@ -309,9 +309,9 @@ function App() {
                 {busy ? "正在加载…" : `${listing.items.length} 篇资讯`}
               </span>
             </div>
-            {tab === "cold" && <div className="panel" role="status">
+            {tab === "cold" && <div className="panel experiment-note" role="status">
               <p>从兴趣和最近阅读开始，逐步调整推荐。这是实验功能，尚未验证实际效果。</p>
-              {listing.experiment?.status.includes("fallback") && <p>加速模型准备中，当前按兴趣与热度推荐。</p>}
+              {listing.experiment?.status.includes("fallback") && <p>加速暂时不可用，已按兴趣与热度推荐。</p>}
               <button disabled={busy} onClick={() => load("/api/feed?cold=true")}>根据最新阅读更新</button>
             </div>}
             {error && (

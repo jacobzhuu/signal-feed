@@ -287,9 +287,13 @@ def test_cold_api_feedback_snapshot_and_missing_model_fallback(online_env, monke
     monkeypatch.setattr(service, "encode_query", lambda text: x[0])
     monkeypatch.setattr(api, "service", service)
     monkeypatch.setattr(serving, "active_ranker", lambda: None)
-    monkeypatch.setattr(
-        worker, "recommend", lambda payload: (None, "unavailable-fallback", None)
-    )
+    calls = []
+
+    def research(payload):
+        calls.append(payload)
+        return None, "unavailable-fallback", None
+
+    monkeypatch.setattr(worker, "recommend", research)
     with db() as c:
         for a in service.items:
             c.execute(
@@ -297,6 +301,9 @@ def test_cold_api_feedback_snapshot_and_missing_model_fallback(online_env, monke
                 (a["id"], a["title"], a["url"], a["domain"], now, a["score"], 0, now),
             )
     with TestClient(api.app) as client:
+        empty = client.get("/api/feed?cold=true").json()
+        assert empty["experiment"]["status"] == "no-personal-signal"
+        assert not calls
         client.put("/api/interests", json={"topics": ["AI"]})
         feed = client.get("/api/feed?cold=true").json()
         assert feed["experiment"]["status"] == "unavailable-fallback"
