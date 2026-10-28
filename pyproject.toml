@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signalfeed"
+version = "0.1.0"
+description = "Reproducible generative and traditional news recommendation"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "torch==2.6.0", "transformers==4.57.1", "accelerate==1.10.1",
+  "peft==0.17.1", "sentence-transformers==5.1.2", "numpy==1.26.4",
+  "pandas==2.2.3", "scikit-learn==1.6.1", "scipy==1.15.3",
+  "fastapi==0.115.12", "uvicorn==0.34.2", "httpx[socks]==0.28.1", "pyarrow==21.0.0",
+  "pydantic==2.11.4", "typer==0.16.0", "pytest==8.3.5",
+  "datasets==4.2.0", "fire==0.7.1", "bitsandbytes==0.48.1"
+]
+
+[project.scripts]
+signalfeed = "signalfeed.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

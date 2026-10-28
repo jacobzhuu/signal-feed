@@ -1,0 +1,14 @@
+{
+  "encoder": "sentence-transformers/all-MiniLM-L6-v2",
+  "generator": "SIDTransformer(dim=128,layers=3,heads=4)",
+  "seed": 42,
+  "history_length": 20,
+  "sid_levels": 3,
+  "codebook_size": 32,
+  "candidate_budget": 100,
+  "generation_beams": 20,
+  "generation_timeout_seconds": 2,
+  "hn_sync_seconds": 900,
+  "upstream_smoke_generator": "Qwen/Qwen2.5-0.5B",
+  "note": "Recorded default profile; CLI controls seed, epochs and evaluation limits."
+}
