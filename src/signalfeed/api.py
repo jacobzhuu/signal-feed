@@ -11,8 +11,9 @@ from typing import Literal
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from .store import db, initialize, connection
+from .store import db, initialize, connection, cleanup
 from .serving import ContentService
+from .snapshots import pack
 
 service = ContentService()
 
@@ -22,6 +23,7 @@ async def periodic_sync():
 
     while True:
         await asyncio.sleep(900)
+        await asyncio.to_thread(cleanup, time.time())
         try:
             await sync()
             await asyncio.to_thread(service.refresh, True)
@@ -36,13 +38,27 @@ async def lifespan(app):
     # and WAL recreation on every last-connection close. Retain FULL durability.
     anchor = connection()
     anchor.execute("SELECT count(*) FROM articles").fetchone()
+    await asyncio.to_thread(cleanup, time.time())
     task = asyncio.create_task(periodic_sync())
+    warm = (
+        asyncio.create_task(asyncio.to_thread(service.refresh))
+        if os.environ.get("SIGNALFEED_PREWARM") == "1"
+        else None
+    )
     yield
     task.cancel()
     try:
         await task
     except asyncio.CancelledError:
         pass
+    if warm is not None:
+        try:
+            await warm
+        except Exception:
+            logging.exception("Encoder warmup failed")
+    from .experimental import shutdown
+
+    await asyncio.to_thread(shutdown)
     anchor.close()
 
 
@@ -86,12 +102,27 @@ async def session(request: Request, call_next):
 def health():
     with db() as c:
         count = c.execute("SELECT count(*) FROM articles WHERE deleted=0").fetchone()[0]
+    ready = service.vectors is not None and bool(service.items)
     return {
-        "status": "ok",
+        "status": "ready" if ready else "warming",
+        "ready": ready,
         "articles": count,
-        "strategy": "content-v1",
+        "strategy": service.version,
+        "catalog_loaded": len(service.items),
+        "catalog_refreshed_at": service.refresh_at,
+        "catalog_error": service.refresh_error,
+        "model_error": service.load_error,
+        "test_events": os.environ.get("SIGNALFEED_TEST_EVENTS", "0") == "1",
         "offline_model_promoted": False,
     }
+
+
+@app.get("/api/ready")
+def ready(response: Response):
+    state = health()
+    if not state["ready"]:
+        response.status_code = 503
+    return state
 
 
 def listing(request, query="", limit=30, research=False):
@@ -141,7 +172,7 @@ def listing(request, query="", limit=30, research=False):
         if snapshot and not query and not research:
             c.execute(
                 "INSERT INTO request_snapshots VALUES(?,?)",
-                (rid, json.dumps(snapshot)),
+                (rid, pack(snapshot)),
             )
     return dict(
         request_id=rid,
@@ -273,23 +304,40 @@ def interests(body: Interests, request: Request):
 
 @app.get("/api/stats")
 def stats():
+    from .online_schema import LABEL_WINDOW
+
+    now = time.time()
     with db() as c:
-        counts = {
-            r[0]: r[1]
+        groups = [
+            dict(r)
             for r in c.execute(
-                "SELECT kind,count(*) FROM events WHERE is_test=0 GROUP BY kind"
+                "WITH exposures AS (SELECT r.id,r.strategy,r.model_version,e.item_id, "
+                "MAX(e.kind='click') clicked,MAX(e.kind='impression') viewable "
+                "FROM requests r JOIN events e ON e.request_id=r.id AND e.user_id=r.user_id "
+                "WHERE r.created+?<=? AND e.created>=r.created AND e.created<r.created+? "
+                "AND e.is_test=0 AND e.kind IN ('impression','click') AND r.query='' "
+                "AND (r.strategy='content-v1' OR r.strategy LIKE 'online-%') "
+                "GROUP BY r.id,e.item_id) "
+                "SELECT strategy,model_version,COUNT(*) impressions,SUM(clicked) clicked_impressions, "
+                "SUM(viewable) viewable_impressions,SUM(NOT viewable) click_inferred_exposures "
+                "FROM exposures GROUP BY strategy,model_version",
+                (LABEL_WINDOW, now, LABEL_WINDOW),
             )
-        }
-        clicked = c.execute(
-            "SELECT count(*) FROM events i WHERE i.kind='impression' AND i.is_test=0 AND EXISTS(SELECT 1 FROM events k WHERE k.request_id=i.request_id AND k.item_id=i.item_id AND k.kind='click' AND k.is_test=0)"
-        ).fetchone()[0]
-    n = counts.get("impression", 0)
+        ]
+        bookmarks = c.execute("SELECT count(*) FROM bookmarks").fetchone()[0]
+    n = sum(g["impressions"] for g in groups)
+    clicked = sum(g["clicked_impressions"] for g in groups)
     return {
-        "scope": "HN real events only; historical MIND experiments excluded",
+        "scope": "HN feed only; mature 24h window; viewable OR click-inferred exposure; test events excluded",
+        "training_note": "Training additionally requires compatible immutable snapshots",
+        "label_window_seconds": LABEL_WINDOW,
         "impressions": n,
         "clicked_impressions": clicked,
+        "viewable_impressions": sum(g["viewable_impressions"] for g in groups),
+        "click_inferred_exposures": sum(g["click_inferred_exposures"] for g in groups),
         "ctr": clicked / n if n else None,
-        "bookmarks": counts.get("bookmark", 0),
+        "bookmarks": bookmarks,
+        "by_policy": groups,
     }
 
 

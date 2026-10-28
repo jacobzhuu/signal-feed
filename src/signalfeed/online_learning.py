@@ -2,9 +2,8 @@
 
 import hashlib
 import json
-import os
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 import numpy as np
 import torch
 from .settings import path
@@ -12,127 +11,124 @@ from .store import db, initialize
 from .ranker import Ranker
 
 
-def online_matrix(vectors, candidates, history):
-    h = history[-20:]
-    x = vectors[candidates]
-    if h:
-        profile = np.average(vectors[h], axis=0, weights=np.linspace(0.5, 1, len(h)))
-        profile /= max(np.linalg.norm(profile), 1e-8)
-        att = x @ vectors[h].T * 5
-        att = np.exp(att - att.max(1, keepdims=True))
-        att /= att.sum(1, keepdims=True)
-        interest = att @ vectors[h]
-        recent = x @ vectors[h[-1]]
-    else:
-        profile = np.zeros(vectors.shape[1])
-        interest = np.zeros_like(x)
-        recent = np.zeros(len(x))
-    extras = np.stack(
-        [
-            x @ profile,
-            recent,
-            np.zeros(len(x)),
-            np.full(len(x), len(h) / 20),
-            np.zeros(len(x)),
-            np.zeros(len(x)),
-        ],
-        1,
-    )
-    return np.concatenate([x, interest, x * interest, extras], 1).astype("float32")
+from .online_schema import (
+    online_matrix as online_matrix,
+    policy_scores,
+    FEATURE_VERSION,
+    LABEL_WINDOW,
+    CONTRACT,
+)
+from .snapshots import unpack
+from .publication import publication_lock, atomic_json
 
 
-FEATURE_VERSION = "online-text-v1"
-LABEL_WINDOW = 86400
+def feedback_records(now, max_exposures=50000):
+    """Stream only requests with feedback; retain bounded complete request groups.
 
-
-def feedback_records(now):
-    """Read immutable serving features, never reconstruct them from event time.
-
-    Labels cover [request, request + 24h); a click may precede an impression.
-    Legacy requests and non-feed surfaces cannot supply comparable features.
+    A valid click proves exposure even if the one-second view event never arrives.
+    Viewable and click-inferred exposure counts remain distinguishable.
     """
+    batches, size = deque(), 0
+    excluded = defaultdict(int)
     with db() as c:
         c.execute("BEGIN")
-        requests = [
-            dict(r)
-            for r in c.execute(
-                "SELECT r.*,s.payload FROM requests r LEFT JOIN request_snapshots s "
-                "ON s.request_id=r.id WHERE r.created+?<=? ORDER BY r.created,r.id",
-                (LABEL_WINDOW, now),
-            )
-        ]
-        events = defaultdict(list)
-        for e in c.execute("SELECT * FROM events WHERE is_test=0 ORDER BY created,id"):
-            events[e["request_id"]].append(dict(e))
-    records = []
-    excluded = defaultdict(int)
-    for request in requests:
-        rid = request["id"]
-        start = request["created"]
-        end = start + LABEL_WINDOW
-        impressions = [e for e in events[rid] if e["kind"] == "impression"]
-        if not impressions:
-            continue
-        if request["query"] or not (
-            request["strategy"] == "content-v1"
-            or request["strategy"].startswith("online-")
-        ):
-            excluded["non_feed"] += len(impressions)
-            continue
-        if not request["payload"]:
-            excluded["missing_snapshot"] += len(impressions)
-            continue
-        snapshot = json.loads(request["payload"])
-        if (
-            snapshot.get("feature_version") != FEATURE_VERSION
-            or snapshot.get("created") != start
-            or snapshot.get("model_version") != request["model_version"]
-        ):
-            excluded["incompatible_snapshot"] += len(impressions)
-            continue
-        items = json.loads(request["items"])
-        clicks = {
-            e["item_id"]
-            for e in events[rid]
-            if e["kind"] == "click"
-            and e["user_id"] == request["user_id"]
-            and start <= e["created"] < end
-        }
-        for e in impressions:
-            iid = e["item_id"]
-            if not (
-                start <= e["created"] < end
-                and e["user_id"] == request["user_id"]
-                and 0 <= e["position"] < len(items)
-                and items[e["position"]] == iid
-            ):
-                excluded["outside_window_or_invalid_exposure"] += 1
-                continue
-            feature = np.asarray(
-                snapshot.get("features", {}).get(iid, []), dtype="float32"
-            )
-            score = snapshot.get("content_scores", {}).get(iid)
-            if (
-                feature.shape != (1158,)
-                or not np.isfinite(feature).all()
-                or score is None
-                or not np.isfinite(score)
-            ):
-                excluded["invalid_features"] += 1
-                continue
-            records.append(
-                (
-                    dict(
-                        e,
-                        request_created=start,
-                        label_end=end,
-                        content_score=float(score),
-                    ),
-                    feature,
-                    int(iid in clicks),
+        requests = c.execute(
+            "SELECT r.*,s.payload FROM requests r LEFT JOIN request_snapshots s ON s.request_id=r.id "
+            "WHERE r.created+?<=? AND EXISTS(SELECT 1 FROM events e WHERE e.request_id=r.id "
+            "AND e.is_test=0 AND e.kind IN ('impression','click')) ORDER BY r.created,r.id",
+            (LABEL_WINDOW, now),
+        )
+        for request in requests:
+            rid, start = request["id"], request["created"]
+            end = start + LABEL_WINDOW
+            events = [
+                dict(e)
+                for e in c.execute(
+                    "SELECT * FROM events WHERE request_id=? AND is_test=0 AND kind IN ('impression','click') ORDER BY created,id",
+                    (rid,),
                 )
-            )
-    return records, dict(excluded)
+            ]
+            if request["query"] or not (
+                request["strategy"] == "content-v1"
+                or request["strategy"].startswith("online-")
+            ):
+                excluded["non_feed"] += sum(e["kind"] == "impression" for e in events)
+                continue
+            if not request["payload"]:
+                excluded["missing_snapshot"] += sum(
+                    e["kind"] == "impression" for e in events
+                )
+                continue
+            try:
+                snapshot = unpack(request["payload"])
+                compatible = (
+                    snapshot.get("feature_version") == FEATURE_VERSION
+                    and snapshot.get("created") == start
+                    and snapshot.get("model_version") == request["model_version"]
+                )
+            except (ValueError, TypeError, KeyError):
+                compatible = False
+            if not compatible:
+                excluded["incompatible_snapshot"] += sum(
+                    e["kind"] == "impression" for e in events
+                )
+                continue
+            items = json.loads(request["items"])
+            valid_events = []
+            for e in events:
+                if not (
+                    start <= e["created"] < end
+                    and e["user_id"] == request["user_id"]
+                    and 0 <= e["position"] < len(items)
+                    and items[e["position"]] == e["item_id"]
+                ):
+                    if e["kind"] == "impression":
+                        excluded["outside_window_or_invalid_exposure"] += 1
+                    continue
+                valid_events.append(e)
+            clicks = {e["item_id"] for e in valid_events if e["kind"] == "click"}
+            exposures = {
+                e["item_id"]: dict(e, exposure_kind="viewable")
+                for e in valid_events
+                if e["kind"] == "impression"
+            }
+            for e in valid_events:
+                if e["kind"] == "click" and e["item_id"] not in exposures:
+                    exposures[e["item_id"]] = dict(e, exposure_kind="click_inferred")
+            batch = []
+            for iid, e in exposures.items():
+                feature = np.asarray(
+                    snapshot.get("features", {}).get(iid, []), dtype="float32"
+                )
+                score = snapshot.get("content_scores", {}).get(iid)
+                if (
+                    feature.shape != (1158,)
+                    or not np.isfinite(feature).all()
+                    or score is None
+                    or not np.isfinite(score)
+                ):
+                    excluded["invalid_features"] += 1
+                    continue
+                batch.append(
+                    (
+                        dict(
+                            e,
+                            request_created=start,
+                            label_end=end,
+                            content_score=float(score),
+                        ),
+                        feature,
+                        int(iid in clicks),
+                    )
+                )
+            if batch:
+                batches.append(batch)
+                size += len(batch)
+                while size > max_exposures and batches:
+                    removed = len(batches.popleft())
+                    size -= removed
+                    excluded["capacity_pruned_exposures"] += removed
+    return [r for batch in batches for r in batch], dict(excluded)
 
 
 def chronological_split(records, incumbent_data_until=None):
@@ -159,13 +155,15 @@ def chronological_split(records, incumbent_data_until=None):
     return train, valid, len(records) - len(train) - len(valid)
 
 
-def compare_policies(valid, candidate_scores, incumbent_scores):
+def compare_policies(valid, candidate_scores, incumbent_scores, diagnostics=None):
     from .evaluation import ranking_metrics, average
 
     groups = defaultdict(list)
     for row, candidate, incumbent in zip(valid, candidate_scores, incumbent_scores):
         groups[row[0]["request_id"]].append((row, float(candidate), float(incumbent)))
     candidate_metrics, incumbent_metrics, predictions = [], [], []
+    clusters = defaultdict(list)
+    cohorts = defaultdict(list)
     for rid, group in groups.items():
         # Stable ties follow the original displayed order, not arrival of the
         # delayed impression events.
@@ -183,11 +181,50 @@ def compare_policies(valid, candidate_scores, incumbent_scores):
         )
         if len(set(labels)) < 2:
             continue
-        candidate_metrics.append(ranking_metrics(labels, cs))
-        incumbent_metrics.append(ranking_metrics(labels, bs))
+        cm, bm = ranking_metrics(labels, cs), ranking_metrics(labels, bs)
+        candidate_metrics.append(cm)
+        incumbent_metrics.append(bm)
+        delta = cm["ndcg10"] - bm["ndcg10"]
+        user = group[0][0][0].get("user_id", rid)
+        clusters[user].append(delta)
+        history = round(float(group[0][0][1][-3]) * 20)
+        cohort = "empty" if history == 0 else "sparse" if history < 5 else "warm"
+        cohorts[cohort].append((delta, cm["auc"] - bm["auc"]))
     a, b = average(candidate_metrics), average(incumbent_metrics)
+    rng = np.random.default_rng(42)
+    cluster_values = list(clusters.values())
+    ci = None
+    if cluster_values:
+        sums = np.array([sum(v) for v in cluster_values])
+        counts = np.array([len(v) for v in cluster_values])
+        draws = rng.integers(len(sums), size=(1000, len(sums)))
+        means = sums[draws].sum(1) / counts[draws].sum(1)
+        ci = np.percentile(means, [2.5, 97.5]).tolist()
+    cohort_safe = all(
+        len(v) >= 20
+        and np.mean([x[0] for x in v]) >= 0
+        and np.mean([x[1] for x in v]) >= 0
+        for v in cohorts.values()
+    )
+    if diagnostics is not None:
+        diagnostics.update(
+            ndcg10_user_bootstrap_ci95=ci,
+            independent_users=len(clusters),
+            cohorts={
+                k: {
+                    "requests": len(v),
+                    "ndcg10_delta": float(np.mean([x[0] for x in v])),
+                    "auc_delta": float(np.mean([x[1] for x in v])),
+                }
+                for k, v in cohorts.items()
+            },
+        )
     promote = bool(
-        len(candidate_metrics) >= 20
+        ci is not None
+        and ci[0] > 0
+        and len(clusters) >= 20
+        and cohort_safe
+        and len(candidate_metrics) >= 20
         and a["ndcg10"] > b["ndcg10"]
         and a["auc"] >= b["auc"]
     )
@@ -195,6 +232,11 @@ def compare_policies(valid, candidate_scores, incumbent_scores):
 
 
 def retrain(min_exposures=1000, min_clicks=50):
+    with publication_lock(path("online-models")):
+        return _retrain(min_exposures, min_clicks)
+
+
+def _retrain(min_exposures=1000, min_clicks=50):
     from .serving import ContentService
 
     initialize()
@@ -232,8 +274,15 @@ def retrain(min_exposures=1000, min_clicks=50):
         or not isinstance(incumbent_manifest.get("data_until"), (int, float))
     ):
         return finish(dict(status="incumbent_provenance_unavailable", **summary))
+    ledger = path("online-models") / "validation.json"
+    used_until = (
+        json.loads(ledger.read_text())["consumed_until"] if ledger.exists() else None
+    )
+    boundaries = [
+        x for x in [used_until, incumbent_manifest.get("data_until")] if x is not None
+    ]
     train, valid, purged = chronological_split(
-        records, incumbent_manifest.get("data_until")
+        records, max(boundaries) if boundaries else None
     )
     if not train or not valid or len({r[2] for r in train}) < 2:
         return finish(
@@ -245,6 +294,11 @@ def retrain(min_exposures=1000, min_clicks=50):
                 purged_exposures=purged,
             )
         )
+    # Consume evaluation data even when the candidate is rejected or training fails.
+    atomic_json(
+        ledger,
+        {"consumed_until": max(r[0]["label_end"] for r in valid), "reserved_at": now},
+    )
     torch.manual_seed(42)
     torch.set_num_threads(4)
     model = Ranker()
@@ -266,16 +320,13 @@ def retrain(min_exposures=1000, min_clicks=50):
         losses.append(float(np.mean(epoch_losses)))
     model.eval()
     vx = torch.tensor(np.stack([r[1] for r in valid]))
-    with torch.inference_mode():
-        scores = model(vx).numpy()
-        # Evaluate the current deployed ranker, even if requests were served by
-        # an older version. The content fallback uses its complete frozen score.
-        baseline = (
-            incumbent(vx).numpy()
-            if incumbent is not None
-            else np.array([r[0]["content_score"] for r in valid])
-        )
-    a, b, nvalid, promoted, predictions = compare_policies(valid, scores, baseline)
+    content = np.array([r[0]["content_score"] for r in valid])
+    scores = policy_scores(model, vx.numpy(), content)
+    baseline = policy_scores(incumbent, vx.numpy(), content)
+    diagnostics = {}
+    a, b, nvalid, promoted, predictions = compare_policies(
+        valid, scores, baseline, diagnostics
+    )
     version = str(time.time_ns())
     dest = path(f"online-models/{version}")
     torch.save(model.state_dict(), dest / "model.pt")
@@ -286,7 +337,8 @@ def retrain(min_exposures=1000, min_clicks=50):
     report = dict(
         status="promoted" if promoted else "kept_for_research",
         version=version,
-        feature_version=FEATURE_VERSION,
+        **CONTRACT,
+        promotion_diagnostics=diagnostics,
         model_sha256=model_hash,
         **summary,
         train_exposures=len(train),
@@ -302,13 +354,14 @@ def retrain(min_exposures=1000, min_clicks=50):
         incumbent_model_sha256=incumbent_manifest.get("model_sha256"),
         policy_changed_during_training=policy_changed,
         train_losses=losses,
-        labels="request-time snapshot; fixed 24h click window; test events excluded",
+        labels="request-time snapshot; mature 24h viewable OR click-inferred exposure; test events excluded",
+        click_inferred_exposures=sum(
+            r[0]["exposure_kind"] == "click_inferred" for r in records
+        ),
         evaluation_scope="same observed feed exposures per held-out request; not full-catalog or causal CTR",
     )
     (dest / "manifest.json").write_text(json.dumps(report, indent=2))
     (dest / "validation_predictions.json").write_text(json.dumps(predictions, indent=2))
     if promoted:
-        temp = pointer.with_suffix(".tmp")
-        temp.write_text(json.dumps(report))
-        os.replace(temp, pointer)
+        atomic_json(pointer, report)
     return finish(report)

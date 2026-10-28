@@ -34,17 +34,28 @@ function Card({
   const emitted = useRef(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const emit = async (kind: string) =>
-    api("/api/events", {
-      method: "POST",
-      body: JSON.stringify({
-        event_id: crypto.randomUUID(),
-        request_id: request,
-        item_id: item.id,
-        kind,
-        position: item.position,
-      }),
+  const emit = async (kind: string) => {
+    const body = JSON.stringify({
+      event_id: crypto.randomUUID(),
+      request_id: request,
+      item_id: item.id,
+      kind,
+      position: item.position,
     });
+    // Reuse the operation UUID if the response was lost after a successful commit.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await api("/api/events", {
+          method: "POST",
+          body,
+          keepalive: true,
+        });
+      } catch (error) {
+        if (attempt === 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+  };
   useEffect(() => {
     emitted.current = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -137,6 +148,9 @@ function App() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
+  const topicsRef = useRef<string[]>([]);
+  const interestRevision = useRef(0);
+  const interestQueue = useRef<Promise<void>>(Promise.resolve());
   const listingSequence = useRef(0);
   const listingUrl = useRef("/api/feed");
   const [stats, setStats] = useState<{
@@ -160,7 +174,12 @@ function App() {
   useEffect(() => {
     load();
     api<{ topics: string[] }>("/api/interests")
-      .then((r) => setTopics(r.topics))
+      .then((r) => {
+        if (interestRevision.current === 0) {
+          topicsRef.current = r.topics;
+          setTopics(r.topics);
+        }
+      })
       .catch(() => {});
     api<typeof stats>("/api/stats")
       .then(setStats)
@@ -169,24 +188,43 @@ function App() {
       listingSequence.current++;
     };
   }, []);
-  const choose = async (topic: string) => {
+  const choose = (topic: string) => {
     const sequence = listingSequence.current;
-    const next = topics.includes(topic)
-      ? topics.filter((t) => t !== topic)
-      : [...topics, topic];
-    try {
-      await api("/api/interests", {
-        method: "PUT",
-        body: JSON.stringify({ topics: next }),
-      });
-      setTopics(next);
-      if (sequence === listingSequence.current) {
-        setTab("feed");
-        load();
+    const revision = ++interestRevision.current;
+    const next = topicsRef.current.includes(topic)
+      ? topicsRef.current.filter((t) => t !== topic)
+      : [...topicsRef.current, topic];
+    topicsRef.current = next;
+    setTopics(next);
+    // Full-list writes must reach the server in the order of user actions.
+    interestQueue.current = interestQueue.current.then(async () => {
+      try {
+        await api("/api/interests", {
+          method: "PUT",
+          body: JSON.stringify({ topics: next }),
+        });
+        if (
+          revision === interestRevision.current &&
+          sequence === listingSequence.current
+        ) {
+          setTab("feed");
+          await load();
+        }
+      } catch (e) {
+        if (revision === interestRevision.current) {
+          try {
+            const saved = await api<{ topics: string[] }>("/api/interests");
+            if (revision === interestRevision.current) {
+              topicsRef.current = saved.topics;
+              setTopics(saved.topics);
+            }
+          } catch {
+            /* Preserve visible intent, and report the failed save. */
+          }
+          if (sequence === listingSequence.current) setError(String(e));
+        }
       }
-    } catch (e) {
-      if (sequence === listingSequence.current) setError(String(e));
-    }
+    });
   };
   return (
     <>
@@ -338,8 +376,8 @@ function App() {
               </p>
               <small>
                 {stats?.ctr == null
-                  ? "真实效果：暂无曝光数据"
-                  : `本站真实曝光 ${stats.impressions} 次 · CTR ${(stats.ctr * 100).toFixed(1)}%`}
+                  ? "真实效果：暂无成熟推荐曝光"
+                  : `推荐成熟有效曝光 ${stats.impressions} 次 · 24h CTR ${(stats.ctr * 100).toFixed(1)}%`}
               </small>
             </div>
           </aside>

@@ -9,8 +9,8 @@ if [[ -f "$SIGNALFEED_HOME/server.pid" ]] && kill -0 "$(cat "$SIGNALFEED_HOME/se
 fi
 nohup signalfeed serve >> "$SIGNALFEED_HOME/logs/server.log" 2>&1 &
 echo "$!" > "$SIGNALFEED_HOME/server.pid"
-for attempt in {1..100}; do
-  if curl --noproxy '*' --max-time 1 -fsS http://127.0.0.1:8765/api/health >/dev/null 2>&1; then
+for attempt in {1..1200}; do
+  if curl --noproxy '*' --max-time 1 -fsS http://127.0.0.1:8765/api/ready >/dev/null 2>&1; then
     echo "SignalFeed ready: http://127.0.0.1:8765"
     exit 0
   fi

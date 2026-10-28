@@ -12,6 +12,8 @@ import signalfeed.online_learning as learning
 import signalfeed.serving as serving
 import numpy as np
 from signalfeed.online_learning import online_matrix
+from signalfeed.online_schema import CONTRACT, policy_scores
+from signalfeed.snapshots import unpack
 
 
 def test_cold_user_features_are_finite_and_history_changes_interactions():
@@ -63,8 +65,8 @@ def online_env(tmp_path, monkeypatch):
 
 def seed_feedback(count=150, *, start=1000000, step=86400, predictive=True):
     """Isolated synthetic fixture, never put in the real feedback database."""
-    vectors = np.eye(384, dtype="float32")[:2]
-    features = online_matrix(vectors, [0, 1], [])
+    vectors = np.eye(384, dtype="float32")[:7]
+    features = online_matrix(vectors, [0, 1], list(range(2, 7)))
     with db() as c:
         for i in range(count):
             stamp = start + i * step
@@ -76,9 +78,9 @@ def seed_feedback(count=150, *, start=1000000, step=86400, predictive=True):
             )
             snapshot = dict(
                 created=stamp,
-                feature_version=learning.FEATURE_VERSION,
+                **CONTRACT,
                 model_version="content-v1",
-                history=[],
+                history=[str(j) for j in range(2, 7)],
                 interests=[],
                 features={"0": features[0].tolist(), "1": features[1].tolist()},
                 content_scores={"0": 0.0, "1": 1.0},
@@ -111,7 +113,7 @@ def publish_ranker(path, preferred=0, version="incumbent", data_until=0):
     torch.save(model.state_dict(), dest / "model.pt")
     manifest = dict(
         version=version,
-        feature_version=learning.FEATURE_VERSION,
+        **CONTRACT,
         data_until=data_until,
         model_sha256=hashlib.sha256((dest / "model.pt").read_bytes()).hexdigest(),
     )
@@ -149,7 +151,7 @@ def test_request_snapshot_survives_early_click_delayed_impression_and_catalog_ch
         iid = feed["items"][0]["id"]
         with db() as c:
             original = c.execute("SELECT payload FROM request_snapshots").fetchone()[0]
-        payload = json.loads(original)
+        payload = unpack(original)
         assert payload["history"] == []
         assert payload["features"][iid][-6] == 0
         assert payload["content_scores"][iid] > 0
@@ -347,9 +349,11 @@ def test_serving_freezes_full_policy_and_exact_online_inputs(online_env, monkeyp
     assert snapshot["model_version"] == "online-incumbent"
     model = service.active_ranker()
     with torch.inference_mode():
-        scores = model(
-            torch.tensor([snapshot["features"][r["id"]] for r in rows])
-        ).numpy()
+        scores = policy_scores(
+            model,
+            np.array([snapshot["features"][r["id"]] for r in rows], dtype="float32"),
+            [snapshot["content_scores"][r["id"]] for r in rows],
+        )
     assert list(scores) == sorted(scores, reverse=True)
     assert snapshot["content_scores"] == pytest.approx(expected)
 

@@ -23,6 +23,7 @@ class Features:
         self.cutoff = json.loads((root / "manifest.json").read_text())["cutoff"]
 
     def fit(self, rows):
+        self.pop.fill(0)
         users = defaultdict(set)
         for r in rows:
             for iid in r["history"]:
@@ -43,19 +44,8 @@ class Features:
             shape=(len(users), len(self.news)),
         )
         norms = np.sqrt(np.asarray(mat.sum(0)).ravel()).clip(1)
-        co = (mat.T @ mat).tocoo()
-        co.data /= norms[co.row] * norms[co.col]
-        cf = co.tocsr()
-        cf.setdiag(0)
-        cf.eliminate_zeros()
-        # Keep bounded neighbors instead of an unbounded dense item matrix.
-        for i in range(cf.shape[0]):
-            a, b = cf.indptr[i : i + 2]
-            if b - a > 100:
-                local = cf.data[a:b]
-                local[np.argpartition(local, -100)[:-100]] = 0
-        cf.eliminate_zeros()
-        self.cf = cf
+        # Bound intermediate memory by row blocks, not a full item-item product.
+        self.cf = bounded_itemcf(mat, norms)
         np.save(path("mind") / "pop.npy", self.pop)
         sparse.save_npz(path("mind") / "cf.npz", self.cf)
 
@@ -123,3 +113,22 @@ def build_statistics():
     f = Features()
     f.fit(load_rows("train"))
     print({"items": len(f.news), "cf_edges": f.cf.nnz})
+
+
+def bounded_itemcf(mat, norms=None, block_size=128, neighbors=100):
+    norms = np.sqrt(np.asarray(mat.sum(0)).ravel()).clip(1) if norms is None else norms
+    blocks = []
+    for begin in range(0, mat.shape[1], block_size):
+        co = (mat[:, begin : begin + block_size].T @ mat).tocoo()
+        co.data /= norms[co.row + begin] * norms[co.col]
+        co.data[co.col == co.row + begin] = 0
+        block = co.tocsr()
+        block.eliminate_zeros()
+        for row in range(block.shape[0]):
+            a, b = block.indptr[row : row + 2]
+            if b - a > neighbors:
+                order = np.lexsort((block.indices[a:b], -block.data[a:b]))
+                block.data[a:b][order[neighbors:]] = 0
+        block.eliminate_zeros()
+        blocks.append(block)
+    return sparse.vstack(blocks, format="csr") if blocks else sparse.csr_matrix((0, 0))

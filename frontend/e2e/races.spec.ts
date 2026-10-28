@@ -144,3 +144,55 @@ test("interest update finishing after navigation does not return to feed", async
   await expect(page.locator(".story")).toContainText("Saved article");
   await expect(page.getByRole("heading", { name: "你的收藏" })).toBeVisible();
 });
+
+test("rapid interest selections are serialized and preserve both choices", async ({
+  page,
+}) => {
+  await mockApi(page);
+  const writes: Route[] = [];
+  await page.route("**/api/interests", (route) => {
+    if (route.request().method() === "PUT") writes.push(route);
+    else return route.fulfill({ json: { topics: [] } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Science", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await page.getByRole("button", { name: "Security", exact: true }).click();
+  expect(writes).toHaveLength(1);
+  expect(writes[0].request().postDataJSON().topics).toEqual(["Science"]);
+  await writes[0].fulfill({ json: { topics: ["Science"] } });
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].request().postDataJSON().topics).toEqual([
+    "Science",
+    "Security",
+  ]);
+  await writes[1].fulfill({ json: { topics: ["Science", "Security"] } });
+  await expect(
+    page.getByRole("button", { name: "Science", exact: true }),
+  ).toHaveClass("selected");
+  await expect(
+    page.getByRole("button", { name: "Security", exact: true }),
+  ).toHaveClass("selected");
+});
+
+test("feedback network retry reuses the same operation UUID", async ({
+  page,
+}) => {
+  await mockApi(page);
+  const bodies: Record<string, unknown>[] = [];
+  await page.route("**/api/events", (route) => {
+    const body = route.request().postDataJSON();
+    if (body.kind !== "bookmark")
+      return route.fulfill({ json: { accepted: true } });
+    bodies.push(body);
+    if (bodies.length === 1) return route.abort("failed");
+    return route.fulfill({ json: { accepted: true, inserted: false } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "收藏文章", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "取消收藏", exact: true }),
+  ).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0].event_id).toEqual(bodies[1].event_id);
+});

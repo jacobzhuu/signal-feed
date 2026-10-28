@@ -6,6 +6,7 @@ from torch import nn
 from .settings import path
 from .features import Features
 from .data import load_rows
+from .provenance import bind_model, verify_model
 
 
 class Ranker(nn.Module):
@@ -107,6 +108,7 @@ def train(seed=42, epochs=3, limit=0, personal=True):
         masked_features=["population", "itemcf"],
     )
     (dest / "train.json").write_text(json.dumps(meta, indent=2))
+    bind_model(dest)
     return meta
 
 
@@ -114,6 +116,7 @@ def load_ranker(seed=42, personal=True):
     directory = (
         f"models/ranker-{seed}" if personal else f"models/ranker-no-personal-{seed}"
     )
+    verify_model(path(directory))
     model = Ranker()
     model.load_state_dict(
         torch.load(path(directory) / "model.pt", map_location="cpu", weights_only=True)

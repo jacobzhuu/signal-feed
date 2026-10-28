@@ -108,3 +108,14 @@ python scripts/review_online.py --output "$review_run_dir/after"
 ```
 
 本轮 MIND 重跑使用独立的 `SIGNALFEED_HOME`：只读复用原 `mind/`、`hf/`、`models/sid-{42,43,44}`、`models/encoder`、`models/fusion.json`，将新 ranker 与 reports 写入新目录。执行三个种子的 `signalfeed train --model ranker --seed N`，无个性化 `train(personal=False)`，然后每种子 `signalfeed evaluate --seed N --retrieval-limit 1000`（默认全量排序），最后 `python scripts/summarize.py`。原产物保持不动。
+
+
+## 审计 v2 操作约定
+
+- 新离线训练会生成 `bundle.json`，加载时校验数据、ID 排序、向量、码本、特征和权重。旧检查点必须重新训练，或在人工/代码审计完成后显式 `signalfeed bind-offline --attestation '<审计记录>'`。该命令记录复用来源，不声称重训。`fusion.json` 必须按 retrieval-v2 在至少 2,000 条内部验证请求上重新选择。
+- 编码器优先使用固定 revision 的本地缓存。`signalfeed serve` 启动预热，`/api/health` 区分 warming/ready，`/api/ready` 未就绪返回 503。
+- 在线特征版本升级为 online-text-v2；旧版本模型不会静默加载。保留旧快照但训练排除不兼容版本，不用新特征重建旧样本。
+- 模型回滚/激活：`signalfeed activate-online --version <版本>`；不传版本恢复内容策略。命令与训练共享发布锁；不要手工改 active.json 绕过协调。
+- 快照存储为压缩 float32 二进制，调试请调用 `signalfeed.snapshots.unpack(payload)`。后台每轮清理 90 天之前的快照，保留真实反馈及其请求元数据。训练默认最多读取最近 50,000 个曝光，完整保留请求组并报告被容量限制丢弃的样本数。
+- 测试与报告：在独立 SIGNALFEED_HOME 下启动 `SIGNALFEED_TEST_EVENTS=1` 服务；设置 SIGNALFEED_BASE_URL 后执行 `python scripts/verify.py --browser`、`python scripts/benchmark.py`。性能脚本会写请求和测试曝光，拒绝运行在真实事件服务上。
+- `python scripts/write_report.py --run <独立运行目录>` 要求同一源码/运行的指标、验证及成本证据。旧的无参数报告生成方式已移除。不要用旧 9 项测试或旧延迟覆盖新结果。

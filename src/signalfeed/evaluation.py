@@ -11,6 +11,8 @@ from .features import Features
 from .data import load_rows
 from .ranker import load_ranker
 from .generator import Generator
+from .retrieval import adaptive, RetrievalPolicy, load_gate, POLICY_VERSION
+from .provenance import run_identity
 
 
 def ranking_metrics(labels, scores):
@@ -46,24 +48,8 @@ def average(rows):
     )
 
 
-def top(scores, eligible, k):
-    ids = np.flatnonzero(eligible)
-    if not len(ids):
-        return []
-    n = min(k, len(ids))
-    part = np.argpartition(-scores[ids], n - 1)[:n]
-    return ids[part[np.argsort(-scores[ids[part]], kind="stable")]].tolist()
-
-
-def fuse(lists, budget=100, weights=None):
-    scores = defaultdict(float)
-    for name, ids in lists.items():
-        for rank, i in enumerate(ids):
-            scores[i] += (weights or {}).get(name, 1) / (60 + rank + 1)
-    return sorted(scores, key=lambda i: (-scores[i], i))[:budget]
-
-
 def recall_metrics(pred, positive):
+    pred = list(dict.fromkeys(pred))
     pos = set(positive)
     n = len(pos)
     result = {f"recall{k}": len(set(pred[:k]) & pos) / n if n else 0 for k in [20, 50]}
@@ -87,6 +73,21 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
     ablation_path = path("models") / f"ranker-no-personal-{seed}" / "model.pt"
     no_personal = load_ranker(seed, False) if ablation_path.exists() else None
     rank_reports = defaultdict(list)
+    rank_cohorts = defaultdict(lambda: defaultdict(list))
+    train_users = {r["user"] for r in load_rows("train")}
+
+    def cohorts(r):
+        n = len(f.history(r))
+        result = [
+            "all",
+            "history_0" if n == 0 else "history_1_5" if n <= 5 else "history_6_20",
+            "unseen_user" if r["user"] not in train_users else "seen_user",
+        ]
+        positives = [f.index[i] for i, y in zip(r["items"], r["labels"]) if y]
+        if any(f.first[i] >= f.cutoff for i in positives):
+            result += ["new_item", result[1] + "/new_item"]
+        return result
+
     with (
         open(dest / "ranking_predictions.jsonl", "w") as predictions,
         torch.inference_mode(),
@@ -106,11 +107,16 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
                     torch.from_numpy(xp)
                 ).numpy()
             for name, s in scores.items():
-                rank_reports[name].append(ranking_metrics(r["labels"], s))
+                metric = ranking_metrics(r["labels"], s)
+                rank_reports[name].append(metric)
+                for cohort in cohorts(r):
+                    rank_cohorts[cohort][name].append(metric)
             predictions.write(
                 json.dumps(
                     {
                         "id": r["id"],
+                        "user": r["user"],
+                        "cohorts": cohorts(r),
                         "labels": r["labels"],
                         "items": r["items"],
                         "scores": {k: v.tolist() for k, v in scores.items()},
@@ -127,17 +133,19 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
     new_hits = defaultdict(list)
     latencies = []
     rrows = load_rows(split, retrieval_limit)
-    all_buckets = defaultdict(list)
-    prefix_buckets = defaultdict(list)
-    for i, code in enumerate(f.codes):
-        all_buckets[tuple(code)].append(i)
-        prefix_buckets[tuple(code[:2])].append(i)
-    gate_file = path("models") / "fusion.json"
     gate = (
-        json.loads(gate_file.read_text())
-        if gate_file.exists()
-        else {"threshold": 5, "weight": 1.5, "source": "untuned default"}
+        {
+            "threshold": 5,
+            "weight": 1.5,
+            "source": "untuned validation default",
+            "policy_version": POLICY_VERSION,
+        }
+        if split == "valid"
+        else load_gate()
     )
+    policy = RetrievalPolicy(f, gen, gate)
+    retrieval_cohorts = defaultdict(lambda: defaultdict(list))
+    availability = []
     # Strict availability is first appearance < impression time, excluding
     # candidates whose only known appearance is this very impression.
     with (
@@ -148,74 +156,34 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
             tick = time.perf_counter()
             eligible = f.first < r["time"]
             eligible[f.history(r)] = False
-            sim, cf = f.scores(r)
-            pop = top(f.pop, eligible, 100)
-            content = top(sim, eligible, 100)
-            itemcf = top(cf, eligible, 100)
-            buckets = {
-                code: [i for i in ids if eligible[i]]
-                for code, ids in all_buckets.items()
-            }
-            buckets = {code: ids for code, ids in buckets.items() if ids}
-            generated = gen.generate(
-                r["history"], f.index, f.codes, beams=20, valid_codes=buckets.keys()
-            )
-            exact = []
-            prefix = []
-            for code, score in generated:
-                exact.extend(sorted(buckets.get(code, []), key=lambda i: -f.pop[i])[:5])
-                pool = [i for i in prefix_buckets[code[:2]] if eligible[i]]
-                prefix.extend(sorted(pool, key=lambda i: -sim[i])[:5])
-            exact = list(dict.fromkeys(exact))[:100]
-            prefix = list(dict.fromkeys(prefix))[:100]
-            traditional = fuse({"popular": pop, "content": content, "itemcf": itemcf})
-            fixed = fuse(
-                {
-                    "popular": pop,
-                    "content": content,
-                    "itemcf": itemcf,
-                    "generated": prefix,
-                }
-            )
-            # Deterministic gate; constants selected only on internal validation.
-            long_history = len(f.history(r)) >= gate["threshold"]
-            weights = {
-                "popular": 0.5 if long_history else 1.5,
-                "content": 1.0,
-                "itemcf": 1.0,
-                "generated": gate["weight"] if long_history else 0.5,
-            }
-            full = fuse(
-                {
-                    "popular": pop,
-                    "content": content,
-                    "itemcf": itemcf,
-                    "generated": prefix,
-                },
-                weights=weights,
-            )
-            variants = {
-                "popularity": pop,
-                "itemcf": itemcf,
-                "content": content,
-                "generative": exact,
-                "generative_prefix": prefix,
-                "traditional": traditional,
-                "fixed_fusion": fixed,
-                "adaptive_fusion": full,
-            }
-            for name, candidates in [("full_dnn", full), ("no_gen_dnn", traditional)]:
+            variants = policy.candidates(r, eligible)
+            full = variants["adaptive_fusion"]
+            no_gen = variants["adaptive_no_gen"]
+            prefix, traditional = variants["generative_prefix"], variants["traditional"]
+            for name, candidates in [("full_dnn", full), ("no_gen_dnn", no_gen)]:
                 if candidates:
                     scores = ranker(
                         torch.from_numpy(f.matrix(r, candidates, stats=False))
                     ).numpy()
-                    variants[name] = [candidates[i] for i in np.argsort(-scores)]
+                    variants[name] = [
+                        candidates[i] for i in np.argsort(-scores, kind="stable")
+                    ]
                 else:
                     variants[name] = []
             positives = [f.index[i] for i, y in zip(r["items"], r["labels"]) if y]
             new = [i for i in positives if f.first[i] >= f.cutoff]
+            reachable = [i for i in positives if eligible[i]]
+            availability.append(len(reachable) / len(positives) if positives else 0)
             for name, pred in variants.items():
-                retrieval[name].append(recall_metrics(pred, positives))
+                metric = recall_metrics(pred, positives)
+                metric["reachable_recall50"] = (
+                    len(set(pred[:50]) & set(reachable)) / len(set(reachable))
+                    if reachable
+                    else None
+                )
+                retrieval[name].append(metric)
+                for cohort in cohorts(r):
+                    retrieval_cohorts[cohort][name].append(metric)
                 coverage[name].update(pred)
                 if new:
                     new_hits[name].append(len(set(pred[:50]) & set(new)) / len(new))
@@ -229,7 +197,11 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
                 json.dumps(
                     dict(
                         id=r["id"],
+                        user=r["user"],
+                        time=r["time"],
+                        cohorts=cohorts(r),
                         positives=positives,
+                        available_positives=reachable,
                         available_positive_count=int(
                             sum(eligible[i] for i in positives)
                         ),
@@ -245,7 +217,18 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
                     flush=True,
                 )
     report = dict(
+        provenance=run_identity(seed, split),
+        policy_version=POLICY_VERSION,
         dataset="MIND-small historical logs; not HN online effects",
+        ranking_cohorts={
+            c: {n: {"impressions": len(v), **average(v)} for n, v in models.items()}
+            for c, models in rank_cohorts.items()
+        },
+        retrieval_cohorts={
+            c: {n: {"impressions": len(v), **average(v)} for n, v in models.items()}
+            for c, models in retrieval_cohorts.items()
+        },
+        positive_availability_rate=float(np.mean(availability)),
         seed=seed,
         ranking_impressions=len(rows),
         retrieval_impressions=len(rrows),
@@ -283,26 +266,33 @@ def evaluate(seed=42, ranking_limit=0, retrieval_limit=1000, split="test"):
 def tune_fusion(seed=42):
     source = path(f"reports/valid-{seed}") / "retrieval_predictions.jsonl"
     rows = [json.loads(line) for line in source.open()]
+    if len(rows) < 2000:
+        raise ValueError(
+            "Fusion selection requires at least 2,000 internal-validation requests"
+        )
+    metrics = json.loads(source.with_name("metrics.json").read_text())
+    if (
+        metrics.get("policy_version") != POLICY_VERSION
+        or metrics["provenance"]["split"] != "valid"
+    ):
+        raise ValueError(
+            "Fusion tuning requires current-policy internal validation predictions"
+        )
     trials = []
     for threshold in [1, 5, 10]:
         for weight in [0.5, 1.0, 1.5, 2.0]:
             values = []
             for r in rows:
                 v = r["variants"]
-                long = r["history_length"] >= threshold
-                pred = fuse(
+                pred = adaptive(
                     {
                         "popular": v["popularity"],
                         "content": v["content"],
                         "itemcf": v["itemcf"],
                         "generated": v["generative_prefix"],
                     },
-                    weights={
-                        "popular": 0.5 if long else 1.5,
-                        "content": 1.0,
-                        "itemcf": 1.0,
-                        "generated": weight if long else 0.5,
-                    },
+                    r["history_length"],
+                    {"threshold": threshold, "weight": weight},
                 )
                 values.append(recall_metrics(pred, r["positives"])["recall50"])
             trials.append(
@@ -315,6 +305,9 @@ def tune_fusion(seed=42):
         **best,
         "source": str(source),
         "selection": "internal-validation recall50 only",
+        "policy_version": POLICY_VERSION,
+        "validation_requests": len(rows),
+        "provenance": metrics["provenance"],
         "trials": trials,
     }
     (path("models") / "fusion.json").write_text(json.dumps(result, indent=2))

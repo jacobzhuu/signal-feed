@@ -11,6 +11,7 @@ import torch
 from torch import nn
 from .settings import path
 from .data import load_rows
+from .provenance import bind_model, verify_model
 from .sid import ResidualCodes
 
 SIZE = 32
@@ -158,11 +159,13 @@ def train(seed=42, epochs=3, limit=0):
         history=log,
     )
     (dest / "train.json").write_text(json.dumps(meta, indent=2))
+    bind_model(dest)
     return meta
 
 
 class Generator:
     def __init__(self, seed=42, device="cpu"):
+        verify_model(path(f"models/sid-{seed}"))
         self.device = device
         self.model = SIDTransformer().to(device)
         self.model.load_state_dict(

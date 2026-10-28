@@ -13,7 +13,7 @@ for seed in 42 43 44; do
   signalfeed train --model ranker --seed "$seed"
 done
 python -c 'from signalfeed.ranker import train; train(personal=False)'
-signalfeed evaluate --split valid --ranking-limit 2000 --retrieval-limit 300
+signalfeed evaluate --split valid --ranking-limit 2000 --retrieval-limit 2000
 signalfeed tune-fusion
 for seed in 42 43 44; do
   signalfeed evaluate --seed "$seed" --retrieval-limit 1000

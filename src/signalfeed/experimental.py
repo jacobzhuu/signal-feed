@@ -1,16 +1,17 @@
 """Isolated MIND-to-HN research inference; never automatically promoted."""
 
-from concurrent.futures import ProcessPoolExecutor, TimeoutError
 import multiprocessing
 import hashlib
 import time
 import threading
 import numpy as np
+from .settings import path
+from .provenance import sha256
 
-_pool = None
 _cache = {}
 _pending = None
 _lock = threading.Lock()
+MAX_RUNTIME = 30
 
 
 def research_rank(payload):
@@ -71,41 +72,108 @@ def research_rank(payload):
     return [items[ids[i]]["id"] for i in np.argsort(-scores)]
 
 
-def _recommend(payload, timeout=2):
-    global _pool, _pending
+def cache_key(payload):
     items, vectors, history = payload
-    key = hashlib.sha256(repr(([a["id"] for a in items], history)).encode()).hexdigest()
+    models = [
+        sha256(path("mind") / "quantizer.npz"),
+        sha256(path("models/sid-42") / "model.pt"),
+        sha256(path("models/ranker-42") / "model.pt"),
+    ]
+    h = hashlib.sha256(
+        repr(([(a["id"], a["title"]) for a in items], history, models)).encode()
+    )
+    h.update(np.asarray(vectors, dtype="float32").tobytes())
+    return h.hexdigest()
+
+
+def _worker(connection, payload):
+    try:
+        connection.send((True, research_rank(payload)))
+    except Exception as exc:
+        connection.send((False, type(exc).__name__ + ": " + str(exc)))
+    finally:
+        connection.close()
+
+
+def _stop(pending):
+    pending["timer"].cancel()
+    process = pending["process"]
+    if process.is_alive():
+        process.terminate()
+    process.join(timeout=0.2)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=0.2)
+    pending["connection"].close()
+
+
+def _expire(process):
+    global _pending
+    with _lock:
+        if _pending is not None and _pending["process"] is process:
+            _stop(_pending)
+            _pending = None
+
+
+def shutdown():
+    global _pending
+    with _lock:
+        if _pending is not None:
+            _stop(_pending)
+            _pending = None
+        _cache.clear()
+
+
+def _collect():
+    global _pending
+    if _pending is None:
+        return
+    pending = _pending
+    if pending["connection"].poll():
+        try:
+            ok, result = pending["connection"].recv()
+            if ok:
+                _cache[pending["key"]] = (time.monotonic(), result)
+        except (EOFError, OSError):
+            pass
+        _stop(pending)
+        _pending = None
+    elif (
+        not pending["process"].is_alive()
+        or time.monotonic() - pending["started"] >= MAX_RUNTIME
+    ):
+        _stop(pending)
+        _pending = None
+
+
+def _recommend(payload, timeout=2):
+    global _pending
+    key = cache_key(payload)
     now = time.monotonic()
+    _collect()
     if key in _cache and now - _cache[key][0] < 300:
         return _cache[key][1], "research-cache"
     if _pending is not None:
-        old_key, future = _pending
-        if future.done():
-            try:
-                _cache[old_key] = (now, future.result())
-            except Exception:
-                pass
-            _pending = None
-            if key in _cache:
-                return _cache[key][1], "research-cache"
-        else:
-            return [], "research-busy-fallback"
+        return [], "research-busy-fallback"
     if len(_cache) > 128:
         _cache.clear()
-    if _pool is None:
-        _pool = ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn"))
-    future = _pool.submit(research_rank, payload)
-    _pending = (key, future)
-    try:
-        result = future.result(timeout=timeout)
-        _cache[key] = (now, result)
-        _pending = None
-        return result, "research-mind-transfer"
-    except TimeoutError:
-        return [], "research-timeout-fallback"
-    except Exception:
-        _pending = None
+    context = multiprocessing.get_context("spawn")
+    connection, child = context.Pipe(duplex=False)
+    process = context.Process(target=_worker, args=(child, payload), daemon=True)
+    process.start()
+    child.close()
+    timer = threading.Timer(MAX_RUNTIME, _expire, args=(process,))
+    timer.daemon = True
+    _pending = dict(
+        key=key, process=process, connection=connection, started=now, timer=timer
+    )
+    timer.start()
+    if connection.poll(min(timeout, MAX_RUNTIME)):
+        _collect()
+        if key in _cache:
+            return _cache[key][1], "research-mind-transfer"
         return [], "research-unavailable-fallback"
+    return [], "research-timeout-fallback"
 
 
 def recommend(payload, timeout=2):
@@ -113,5 +181,7 @@ def recommend(payload, timeout=2):
         return [], "research-busy-fallback"
     try:
         return _recommend(payload, timeout)
+    except Exception:
+        return [], "research-unavailable-fallback"
     finally:
         _lock.release()

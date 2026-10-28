@@ -68,6 +68,9 @@ def upstream_smoke(steps: int = 32):
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8765):
     import uvicorn
+    import os
+
+    os.environ.setdefault("SIGNALFEED_PREWARM", "1")
 
     uvicorn.run("signalfeed.api:app", host=host, port=port)
 
@@ -98,6 +101,59 @@ def infer(history: str = "", seed: int = 42, limit: int = 10):
         [i.strip() for i in history.split(",") if i.strip()], seed, limit
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command()
+def bind_offline(attestation: str):
+    """Explicitly attest already audited legacy checkpoints; never done on load."""
+    from .provenance import bind_model
+    from .settings import path
+
+    if len(attestation.strip()) < 12:
+        raise typer.BadParameter(
+            "Provide the audit/run reference supporting this attestation"
+        )
+    for file in path("models").glob("*/model.pt"):
+        if file.parent.name.startswith(("sid-", "ranker-")):
+            bind_model(file.parent, origin="audited legacy: " + attestation)
+
+
+@app.command()
+def activate_online(version: str = ""):
+    """Validated rollback/publication, serialized with training. Empty restores content."""
+    import json
+    from .settings import path
+    from .publication import publication_lock, atomic_json
+    from .online_schema import CONTRACT
+    from .provenance import sha256
+    import re
+    import torch
+    from .ranker import Ranker
+
+    root = path("online-models")
+    with publication_lock(root):
+        pointer = root / "active.json"
+        if not version:
+            pointer.unlink(missing_ok=True)
+            return
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", version):
+            raise typer.BadParameter("Invalid version")
+        manifest = json.loads((root / version / "manifest.json").read_text())
+        if (
+            any(manifest.get(k) != v for k, v in CONTRACT.items())
+            or manifest["version"] != version
+        ):
+            raise typer.BadParameter("Incompatible model contract")
+        file = root / version / "model.pt"
+        if sha256(file) != manifest["model_sha256"]:
+            raise typer.BadParameter("Model checksum mismatch")
+        candidate = Ranker()
+        candidate.load_state_dict(
+            torch.load(file, map_location="cpu", weights_only=True)
+        )
+        if not all(torch.isfinite(p).all() for p in candidate.parameters()):
+            raise typer.BadParameter("Non-finite model")
+        atomic_json(pointer, manifest)
 
 
 if __name__ == "__main__":

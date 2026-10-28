@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,request_id TEXT NOT NULL,u
 CREATE TABLE IF NOT EXISTS request_snapshots(request_id TEXT PRIMARY KEY REFERENCES requests(id),payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS user_events ON events(user_id,created);
 CREATE INDEX IF NOT EXISTS item_events ON events(item_id,kind,user_id);
+CREATE INDEX IF NOT EXISTS request_events ON events(request_id,is_test,kind,created);
+CREATE INDEX IF NOT EXISTS request_time ON requests(created);
 CREATE TABLE IF NOT EXISTS bookmarks(user_id TEXT NOT NULL,item_id TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(user_id,item_id));
 CREATE TABLE IF NOT EXISTS ingest_runs(started REAL PRIMARY KEY,finished REAL,count INTEGER,errors INTEGER);
 """
@@ -55,3 +57,25 @@ def initialize():
             "CREATE UNIQUE INDEX IF NOT EXISTS once_exposure_click "
             "ON events(request_id,item_id,kind) WHERE kind IN ('impression','click')"
         )
+
+
+def cleanup(now, retention_days=90, batch_size=1000):
+    """Bound snapshot retention; preserve events, bookmarks and their request rows."""
+    if retention_days < 2:
+        raise ValueError("Retention must cover the complete 24h label window")
+    cutoff = now - retention_days * 86400
+    with db() as c:
+        removed = c.execute(
+            "DELETE FROM request_snapshots WHERE request_id IN "
+            "(SELECT r.id FROM requests r JOIN request_snapshots s ON s.request_id=r.id "
+            "WHERE r.created<? ORDER BY r.created LIMIT ?)",
+            (cutoff, batch_size),
+        ).rowcount
+        c.execute(
+            "DELETE FROM requests WHERE id IN (SELECT r.id FROM requests r "
+            "WHERE r.created<? AND NOT EXISTS(SELECT 1 FROM events e WHERE e.request_id=r.id) "
+            "AND NOT EXISTS(SELECT 1 FROM request_snapshots s WHERE s.request_id=r.id) "
+            "ORDER BY r.created LIMIT ?)",
+            (cutoff, batch_size),
+        )
+    return removed

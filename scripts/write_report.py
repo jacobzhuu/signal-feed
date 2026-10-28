@@ -1,138 +1,98 @@
-"""Render the measured experiment report; never invent absent runs."""
+"""Render only an explicitly selected, provenance-checked run."""
 
+import argparse
 import json
 from pathlib import Path
-from signalfeed.settings import ROOT
+from signalfeed.provenance import sha256
 
-root = ROOT
-summary = json.loads((root / "reports/summary.json").read_text())
-assert summary["missing_seeds"] == [], summary["missing_seeds"]
-latency = json.loads((root / "reports/latency.json").read_text())
-smoke = json.loads((root / "upstream-smoke/report.json").read_text())
-research = json.loads((root / "reports/research-inference.json").read_text())
-import re
 
-pytest_log = (root / "logs/pytest.log").read_text()
-assert "failed" not in pytest_log.lower()
-python_tests = int(re.search(r"(\d+) passed", pytest_log).group(1))
-browser = json.loads((root / "reports/browser-tests.json").read_text())["stats"]
-assert browser["unexpected"] == 0 and browser["expected"] >= 2
-lines = [
-    "# SignalFeed 实际运行报告",
-    "",
-    "2026-10-29 Code Review 修复、重新训练/评估及指标变化见 [REVIEW_FIXES.md](REVIEW_FIXES.md) 和 `review-fix-results.json`。HN 旧在线训练指标不可作为修复后效果依据。",
-    "",
-    "本报告来自已完成的真实运行。全部原始预测、权重和日志位于 `/data1/zhuzy/signalfeed`，项目内 `artifacts` 为便捷链接。",
-    "",
-    "## 已完成",
-    "",
-    "- 克隆并固定官方 MiniOneRec，保留原仓库未修改；记录许可证、移植代码和新增贡献。",
-    "- Python 3.11 + PyTorch 2.6.0 CUDA 11.8 专用环境，RTX 3090 Ti 实际训练。",
-    "- 官方 MIND-small 固定版本镜像下载、SHA-256、时间切分审计通过，65,238 篇新闻无缺失元数据。",
-    "- SID 和 DNN 分别完成 seed 42/43/44、3 epoch 训练；每个种子均完成 73,152 个留出 impressions 排序评测和固定抽样 1,000 个全目录召回评测。",
-    "- HN 抓取真实内容，网站搜索、推荐、兴趣、曝光、点击、收藏、反馈持久化和研究模型超时回退均可运行。",
-    f"- {python_tests} 项 Python 测试通过；{browser['expected']} 项 Playwright 浏览器测试通过；TypeScript/Vite 构建、Python 编译与依赖检查通过。",
-    "",
-    "## MIND 历史排序结果",
-    "",
-    "每个种子都使用全部 73,152 个留出 impressions。表中为均值 ± 种子标准差；基线无随机训练；无个性化重训仅 seed 42，不能称为三种子结果。",
-    "",
-    "| 方法 | AUC | MRR | NDCG@5 | NDCG@10 |",
-    "|---|---:|---:|---:|---:|",
-]
-for key, label in [
-    ("popularity", "热门"),
-    ("content", "内容相似度"),
-    ("dnn", "DNN，3 seeds"),
-    ("dnn_no_personalization_retrained", "无个性化重训，1 seed"),
-]:
-    metrics = summary["ranking"][key]
-    values = []
-    for name in ["auc", "mrr", "ndcg5", "ndcg10"]:
-        m = metrics[name]
-        values.append(
-            f"{m['mean']:.4f}" + (f" ± {m['std']:.4f}" if key == "dnn" else "")
+def render(root, output):
+    summary = json.loads((root / "reports/summary.json").read_text())
+    if summary["missing_seeds"]:
+        raise ValueError("Incomplete seeds: " + str(summary["missing_seeds"]))
+    for name, expected in summary["input_sha256"].items():
+        if sha256(root / name) != expected:
+            raise ValueError("Changed predictions: " + name)
+    validation = json.loads((root / "reports/validation.json").read_text())
+    latency = json.loads((root / "reports/latency.json").read_text())
+    for report in [validation, latency]:
+        if (
+            report["run_id"] != root.name
+            or report["provenance"]["source_sha256"]
+            != summary["provenance"]["source_sha256"]
+        ):
+            raise ValueError("Mixed run/source evidence")
+    if not validation["passed"]:
+        raise ValueError("Validation failed")
+    lines = [
+        "# SignalFeed 实测结果",
+        "",
+        f"运行：`{root.name}`；源码提交 `{summary['provenance']['git_commit']}`；源码哈希 `{summary['provenance']['source_sha256']}`。",
+        "",
+        "MIND 为历史日志实验；HN 没有真实成熟反馈时不宣称线上收益。旧审计修复记录保留于 REVIEW_FIXES.md。",
+        "",
+        "## 排序与全目录召回",
+        "",
+        "| 方法 | AUC | NDCG@10 | Recall@50 |",
+        "|---|---:|---:|---:|",
+    ]
+    for name in sorted(set(summary["ranking"]) | set(summary["retrieval"])):
+        values = []
+        for section, key in [
+            ("ranking", "auc"),
+            ("ranking", "ndcg10"),
+            ("retrieval", "recall50"),
+        ]:
+            m = summary[section].get(name, {}).get(key)
+            values.append(
+                f"{m['mean']:.6f} ± {m['std']:.6f} (n={m['n']})" if m else "—"
+            )
+        lines.append("| " + name + " | " + " | ".join(values) + " |")
+    lines += [
+        "",
+        "## 受控消融与不确定性",
+        "",
+        "去生成消融保持其余通道权重、预算及 DNN 不变。以下只为 seed 42，按用户聚类 bootstrap。",
+        "",
+        "| 比较 | 差值 | 95% 区间 |",
+        "|---|---:|---|",
+    ]
+    for name, m in summary["paired_bootstrap"].items():
+        lines.append(f"| {name} | {m['mean']:.6f} | {m['ci95']} |")
+    lines += [
+        "",
+        "## 冷人群证据",
+        "",
+        "| 分组 | 请求数 | 用户数 | 完整模型－去生成 Recall@50 | 95% 区间 |",
+        "|---|---:|---:|---:|---|",
+    ]
+    for name, m in summary["cold_bootstrap"].items():
+        lines.append(
+            f"| {name} | {m['impressions']} | {m['users']} | {m['mean']} | {m['ci95']} |"
         )
-    lines.append("| " + label + " | " + " | ".join(values) + " |")
-lines += [
-    "",
-    "DNN 有稳定的历史排序提升，个性化特征的消融下降明显；这些是历史日志结果，不是 HN 点击率。",
-    "",
-    "## 全目录召回与消融",
-    "",
-    "每个种子采用相同的 1,000 个固定随机抽样 impressions；所有正目标都计入分母，包括目录代理认为当时不可用的文章。首次出现时间是可用性代理，不是真实发布时间。",
-    "",
-    "| 方法 | Recall@50 均值 ± std | 新文章 Recall@50 |",
-    "|---|---:|---:|",
-]
-for key, label in [
-    ("popularity", "热门"),
-    ("itemcf", "ItemCF"),
-    ("content", "内容向量"),
-    ("generative", "生成 SID 桶"),
-    ("generative_prefix", "生成语义前缀 + 向量扩展"),
-    ("traditional", "传统融合"),
-    ("fixed_fusion", "固定四路融合"),
-    ("adaptive_fusion", "验证集选择的自适应融合"),
-    ("full_dnn", "自适应融合 + DNN"),
-    ("no_gen_dnn", "去生成召回 + DNN"),
-]:
-    m = summary["retrieval"][key]
-    v = m["recall50"]
-    n = m["new_item_recall50"]
-    lines.append(f"| {label} | {v['mean']:.5f} ± {v['std']:.5f} | {n['mean']:.5f} |")
-lines += [
-    "",
-    "生成前缀与传统召回候选的平均 Jaccard 约 0.044–0.045，三个种子分别新增 29、29、26 个传统候选之外的正命中。候选互补存在，但组合策略未充分兑现收益。",
-    "",
-    "以下配对 bootstrap 仅针对 seed 42 的相同 1,000 个 impressions，2,000 次重采样；不是跨用户线上实验：",
-    "",
-    "| 比较 | Recall@50 绝对差 | 95% 区间 |",
-    "|---|---:|---:|",
-]
-for name, m in summary["paired_bootstrap"].items():
-    lines.append(
-        f"| {name} | {m['mean']:.6f} | [{m['ci95'][0]:.6f}, {m['ci95'][1]:.6f}] |"
-    )
-lines += [
-    "",
-    "**负面结果也保留：**自适应融合低于固定融合；完整融合 + DNN 的召回没有超过最佳单路前缀扩展。加入生成召回的端到端 Recall 增益区间包含零，因此不能声称显著、稳定提升。当前 300 条内部验证样本可能不足以选择可靠门控。",
-    "",
-    "## 上游 Qwen 最小验证",
-    "",
-    f"真实 Amazon 256 条训练候选子集，实际执行 {smoke['train_steps']} 步、batch 2（消费 64 条样本）；32 条测试。训练 loss 从 {smoke['losses'][0]:.4f} 到 {smoke['losses'][-1]:.4f}。保存、重新加载 LoRA 与 SID embedding 后生成；非法 SID 数 {smoke['invalid']}，HR@10={smoke['hr10']:.4f}，NDCG@10={smoke['ndcg10']:.4f}。",
-    "",
-    "该结果只验证训练/推理/评测链路，不能称为论文复现。完整 MIND 实验使用约 63 万参数 SID Transformer，Qwen 全量 MIND SFT 和 GRPO 未运行。",
-    "",
-    "## 网站与性能",
-    "",
-    "网站：http://127.0.0.1:8765 。首次同步 953 篇真实 HN 故事，运行期间继续增量更新。所有浏览器测试使用独立数据库和测试标记。交付时没有真实用户曝光，CTR 为 null，而非虚构的提升数值。",
-    "",
-    f"本机混合 feed/search，各并发级别 80 次 HTTP 请求。进程首次请求（含编码器加载）{latency['initial_request_ms'] / 1000:.2f}s。",
-    "",
-    "| 并发 | p50 | p95 | 吞吐 |",
-    "|---|---:|---:|---:|",
-]
-for concurrency in ["1", "8"]:
-    m = latency[concurrency]
-    lines.append(
-        f"| {concurrency} | {m['p50_ms']:.1f}ms | {m['p95_ms']:.1f}ms | {m['requests_per_second']:.1f} req/s |"
-    )
-lines += [
-    "",
-    "优化包括查询缓存、增量 embedding、限制小矩阵 BLAS 线程、WAL 常驻连接，以及返回日志与真实反馈的持久化策略分离。真实反馈仍 FULL 同步提交；可重建的返回日志使用 NORMAL。保留优化前实测 JSON，但主机共享负载不同，不能把前后差值解释为严格受控的缓存收益。",
-    "",
-    f"独立研究进程实测：首次超时 {research[0]['seconds']:.2f}s 后返回内容策略，下一次 {research[-1]['seconds']:.3f}s 返回真实生成/DNN 结果。只验证跨域推理可用，未验证 HN 效果。",
-    "",
-    "## 遗留问题与下一阶段",
-    "",
-    "1. 扩大内部验证与全目录召回评测样本；研究学得的召回门控，加入置信度与兴趣集中度，避免小验证集过拟合。",
-    "2. 当前 3×32 码本碰撞率约 71%；扩大码本、加入文本对齐，比较 Qwen 单卡 LoRA 全量训练和紧凑模型的质量/成本。",
-    "3. 收集真实新站行为，完成至少 24 小时成熟曝光的线上重训；当前真实样本为 0，训练发布分支没有用伪造流量验证。",
-    "4. 降低约 8 秒模型冷加载时间；面向更大流量引入预热、批处理、独立向量索引和数据库部署。",
-    "5. 公网部署、账号体系、A/B 分流和广告竞价不在当前实现中；新增前需要明确实际业务与数据条件。",
-    "",
-    "完整口径见 [EXPERIMENTS.md](EXPERIMENTS.md)，启动与维护见 [OPERATIONS.md](OPERATIONS.md)。",
-]
-Path("docs/RESULTS.md").write_text("\n".join(lines) + "\n")
-Path("docs/results.json").write_text(json.dumps(summary, indent=2))
+    lines += [
+        "",
+        "新文章以首次日志出现时间定义，不是真实发布时间；主 Recall 保留全部正目标。可达目标 Recall、可达率及各分组 AUC/NDCG 见 results.json。样本不足和跨零区间不得解释为确定收益。",
+        "",
+        "## 工程验证与成本",
+        "",
+        f"验证结果：`{json.dumps(validation, ensure_ascii=False)}`",
+        "",
+        f"隔离服务成本：`{json.dumps(latency, ensure_ascii=False)}`",
+        "",
+        "HTTP 基准会写请求/压缩快照；反馈负载仅允许隔离测试服务。共享硬件数据不作为生产容量承诺。",
+        "",
+        "## 可复现性",
+        "",
+        "运行 scripts/run_experiments.sh 后，使用 scripts/verify.py 和 scripts/benchmark.py 写入同一独立 SIGNALFEED_HOME，再运行 `python scripts/write_report.py --run <目录>`。报告拒绝混合源码、运行或被修改的预测。",
+    ]
+    output.write_text("\n".join(lines) + "\n")
+    output.with_name("results.json").write_text(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run", required=True, type=Path)
+    parser.add_argument("--output", type=Path, default=Path("docs/RESULTS.md"))
+    args = parser.parse_args()
+    render(args.run.resolve(), args.output)
