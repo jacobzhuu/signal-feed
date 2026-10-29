@@ -1,0 +1,571 @@
+{
+  "status": "collection_only_insufficient_feedback",
+  "baseline_commit": "80cb25f",
+  "implementation_commit": "90d2dc1",
+  "current_source": {
+    "git_commit": "90d2dc1e1af31a714866372de5c8eb45ac6d0faf",
+    "worktree_dirty": true,
+    "source_sha256": "35f5544c3d4c3e75013a7186aa17a6c775ae426da370a22e8e92a271736ab6fa"
+  },
+  "audit": {
+    "version": "temporal-readiness-v4",
+    "as_of": 1793262848.5965104,
+    "as_of_utc": "2026-10-29T08:34:08.596510+00:00",
+    "inventory": {
+      "users": 136,
+      "requests": 806,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "events": {},
+    "requests": {
+      "baseline_feed_requests": 406,
+      "immature_feed_requests": 406,
+      "missing_snapshot": 406,
+      "non_baseline_feed_requests": 400
+    },
+    "source_test_users": 0,
+    "mature_exposed_users": 0,
+    "mature_clicked_users": 0,
+    "daily": {
+      "2026-10-28/0": {
+        "requests": 406,
+        "mature_requests": 0,
+        "missing_snapshot": 406
+      }
+    },
+    "phases": {
+      "select": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      },
+      "guard": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      },
+      "test": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      }
+    },
+    "feedback_intervals_seconds": {},
+    "readiness": {
+      "status": "collecting_insufficient_feedback",
+      "feedback_pilot_minimum_met": false,
+      "full_catalog_replay_supported": false,
+      "efficacy_authorized": false,
+      "reason": "Returned-item snapshots lack a request-time full catalog and complete replay inputs"
+    },
+    "notes": [
+      "Counts marked non-test do not prove human activity or signup status",
+      "Anonymous user table has no creation time; inventory is capture-time only",
+      "Daily CTR is observational on logged exposure support, not counterfactual policy gain",
+      "Feedback interval is request-to-server-receipt, not client/network reporting delay",
+      "Strict whole-request snapshot validation; training may retain individual valid feature rows"
+    ],
+    "capture": {
+      "source_database": "/data1/zhuzy/signalfeed/online.sqlite",
+      "database_sha256": "6ba1e06f09631e09e1a4f67073b7c716a376b3a1cb487d8027f6eeabb47160df",
+      "protocol": {
+        "version": "temporal-readiness-v4",
+        "baseline_commit": "80cb25f",
+        "timezone": "UTC",
+        "user_split_salt": "signalfeed-temporal-v4/user/",
+        "label_window_seconds": 86400,
+        "snapshot_feature_version": "online-text-v2",
+        "baseline_strategy": "content-v1",
+        "phases": {
+          "select": {
+            "start": "2026-10-30T00:00:00Z",
+            "end": "2026-11-06T00:00:00Z",
+            "buckets": [
+              0,
+              1,
+              2
+            ]
+          },
+          "guard": {
+            "start": "2026-11-07T00:00:00Z",
+            "end": "2026-11-14T00:00:00Z",
+            "buckets": [
+              3,
+              4,
+              5
+            ]
+          },
+          "test": {
+            "start": "2026-11-15T00:00:00Z",
+            "end": "2026-11-22T00:00:00Z",
+            "buckets": [
+              6,
+              7,
+              8,
+              9
+            ]
+          }
+        },
+        "close_at": "2026-11-23T00:10:00Z",
+        "minimum_pilot": {
+          "users_per_band_per_phase": 200,
+          "dates_per_band_per_phase": 3,
+          "clicked_users_per_band_per_phase": 20
+        },
+        "candidate_budget": 100,
+        "primary_bands": [
+          "1-5",
+          "10"
+        ],
+        "algorithm_registered": false,
+        "efficacy_authorized": false,
+        "automatic_training": false,
+        "automatic_promotion": false
+      },
+      "algorithm": {
+        "audit_feedback.py": "33e7f4c7595c859f809127f330c0f51b1312ceb9068b126447fb0ce1ad811862",
+        "temporal_audit.py": "f3e35a38802a361b66fc4f97b7392fc0fde444dc4a8a32c836d2c27561ec6e3f",
+        "snapshots.py": "a39688cc7cacc23dda5aebfa04b6a15e1688564714d42287e85a679ba746e009",
+        "protocol.json": "0b6540c69f3ca8d4f74d1e5629104eb4d48e3bb8d30d5e657ac37f986f83634b"
+      },
+      "elapsed_seconds": 0.3066436597146094,
+      "source_open_mode": "ro; query_only; SQLite backup",
+      "snapshot_contains_private_anonymous_activity": true
+    }
+  },
+  "prior_data_diagnosis": {
+    "status": "diagnosis_of_previously_used_data_not_new_evidence",
+    "source_sha256": "e0eaeeae75ba6fa82f2946fc1843fcace9be8fb8d59f796ae9c8eadde13bc7fa",
+    "source_meta_sha256": "b47956573bacaa50cf97479fde6dd77d5f674f862bcce629b1bc86f0d2a2d974",
+    "script_sha256": "0508b2d992fe7eabd66ac8c822b5be7a0527e57ce649197aef7ba040123316f8",
+    "groups": {
+      "1-5": {
+        "users": 3952,
+        "positive_targets": 5065,
+        "reachable_targets": 5063,
+        "unavailable_targets": 2,
+        "methods": {
+          "content_safe": {
+            "target_hits": {
+              "10": 11,
+              "20": 22,
+              "50": 41,
+              "100": 71
+            },
+            "hit_users50": 41,
+            "reachable_targets_outside_top100": 4992,
+            "targets_in_100_but_outside_50": 30,
+            "targets_in_50_but_outside_10": 30,
+            "changed_lists": 0,
+            "nonzero_paired_recall_users": 0,
+            "paired_recall_variance": 0.0,
+            "mean_exposure_auc": 0.5858269035089221
+          },
+          "interest": {
+            "target_hits": {
+              "10": 11,
+              "20": 22,
+              "50": 41,
+              "100": 70
+            },
+            "hit_users50": 41,
+            "reachable_targets_outside_top100": 4993,
+            "targets_in_100_but_outside_50": 29,
+            "targets_in_50_but_outside_10": 30,
+            "changed_lists": 1902,
+            "nonzero_paired_recall_users": 0,
+            "paired_recall_variance": 0.0,
+            "mean_exposure_auc": 0.5860825153627229
+          },
+          "old_interest": {
+            "target_hits": {
+              "10": 6,
+              "20": 17,
+              "50": 46,
+              "100": 65
+            },
+            "hit_users50": 46,
+            "reachable_targets_outside_top100": 4998,
+            "targets_in_100_but_outside_50": 19,
+            "targets_in_50_but_outside_10": 40,
+            "changed_lists": 3197,
+            "nonzero_paired_recall_users": 21,
+            "paired_recall_variance": 0.0032925229444182003,
+            "mean_exposure_auc": 0.588390589830049
+          },
+          "no_reliability": {
+            "target_hits": {
+              "10": 12,
+              "20": 20,
+              "50": 45,
+              "100": 76
+            },
+            "hit_users50": 45,
+            "reachable_targets_outside_top100": 4987,
+            "targets_in_100_but_outside_50": 31,
+            "targets_in_50_but_outside_10": 33,
+            "changed_lists": 3289,
+            "nonzero_paired_recall_users": 10,
+            "paired_recall_variance": 0.0013027911757080924,
+            "mean_exposure_auc": 0.5881490351445183
+          },
+          "no_recency": {
+            "target_hits": {
+              "10": 11,
+              "20": 22,
+              "50": 41,
+              "100": 71
+            },
+            "hit_users50": 41,
+            "reachable_targets_outside_top100": 4992,
+            "targets_in_100_but_outside_50": 30,
+            "targets_in_50_but_outside_10": 30,
+            "changed_lists": 1906,
+            "nonzero_paired_recall_users": 0,
+            "paired_recall_variance": 0.0,
+            "mean_exposure_auc": 0.5861707994273345
+          }
+        }
+      },
+      "10": {
+        "users": 800,
+        "positive_targets": 1074,
+        "reachable_targets": 1073,
+        "unavailable_targets": 1,
+        "methods": {
+          "content_safe": {
+            "target_hits": {
+              "10": 3,
+              "20": 5,
+              "50": 7,
+              "100": 12
+            },
+            "hit_users50": 7,
+            "reachable_targets_outside_top100": 1061,
+            "targets_in_100_but_outside_50": 5,
+            "targets_in_50_but_outside_10": 4,
+            "changed_lists": 0,
+            "nonzero_paired_recall_users": 0,
+            "paired_recall_variance": 0.0,
+            "mean_exposure_auc": 0.6481321919240601
+          },
+          "interest": {
+            "target_hits": {
+              "10": 2,
+              "20": 5,
+              "50": 8,
+              "100": 11
+            },
+            "hit_users50": 8,
+            "reachable_targets_outside_top100": 1062,
+            "targets_in_100_but_outside_50": 3,
+            "targets_in_50_but_outside_10": 6,
+            "changed_lists": 797,
+            "nonzero_paired_recall_users": 1,
+            "paired_recall_variance": 0.00031250000000000017,
+            "mean_exposure_auc": 0.6492166285005354
+          },
+          "old_interest": {
+            "target_hits": {
+              "10": 2,
+              "20": 4,
+              "50": 9,
+              "100": 12
+            },
+            "hit_users50": 9,
+            "reachable_targets_outside_top100": 1061,
+            "targets_in_100_but_outside_50": 3,
+            "targets_in_50_but_outside_10": 7,
+            "changed_lists": 800,
+            "nonzero_paired_recall_users": 6,
+            "paired_recall_variance": 0.004689846683354193,
+            "mean_exposure_auc": 0.6421372251591535
+          },
+          "no_reliability": {
+            "target_hits": {
+              "10": 3,
+              "20": 5,
+              "50": 9,
+              "100": 13
+            },
+            "hit_users50": 9,
+            "reachable_targets_outside_top100": 1060,
+            "targets_in_100_but_outside_50": 4,
+            "targets_in_50_but_outside_10": 6,
+            "changed_lists": 800,
+            "nonzero_paired_recall_users": 2,
+            "paired_recall_variance": 0.0006242177722152691,
+            "mean_exposure_auc": 0.6531141914803625
+          },
+          "no_recency": {
+            "target_hits": {
+              "10": 4,
+              "20": 5,
+              "50": 8,
+              "100": 12
+            },
+            "hit_users50": 8,
+            "reachable_targets_outside_top100": 1061,
+            "targets_in_100_but_outside_50": 4,
+            "targets_in_50_but_outside_10": 4,
+            "changed_lists": 800,
+            "nonzero_paired_recall_users": 1,
+            "paired_recall_variance": 0.00031250000000000017,
+            "mean_exposure_auc": 0.6491594049743398
+          }
+        }
+      }
+    },
+    "power_sensitivity": {
+      "formula": "n ~= (z_(1-alpha/2)+z_0.8)^2 * Var(paired delta) / minimum_effect^2",
+      "alpha_per_comparison": 0.025,
+      "comparisons": 2,
+      "power": 0.8,
+      "rows": [
+        {
+          "assumed_paired_variance": 0.005,
+          "minimum_effect": 0.001,
+          "approximate_users_per_band_per_stage": 47526
+        },
+        {
+          "assumed_paired_variance": 0.005,
+          "minimum_effect": 0.002,
+          "approximate_users_per_band_per_stage": 11882
+        },
+        {
+          "assumed_paired_variance": 0.005,
+          "minimum_effect": 0.005,
+          "approximate_users_per_band_per_stage": 1902
+        },
+        {
+          "assumed_paired_variance": 0.01,
+          "minimum_effect": 0.001,
+          "approximate_users_per_band_per_stage": 95051
+        },
+        {
+          "assumed_paired_variance": 0.01,
+          "minimum_effect": 0.002,
+          "approximate_users_per_band_per_stage": 23763
+        },
+        {
+          "assumed_paired_variance": 0.01,
+          "minimum_effect": 0.005,
+          "approximate_users_per_band_per_stage": 3803
+        },
+        {
+          "assumed_paired_variance": 0.02,
+          "minimum_effect": 0.001,
+          "approximate_users_per_band_per_stage": 190101
+        },
+        {
+          "assumed_paired_variance": 0.02,
+          "minimum_effect": 0.002,
+          "approximate_users_per_band_per_stage": 47526
+        },
+        {
+          "assumed_paired_variance": 0.02,
+          "minimum_effect": 0.005,
+          "approximate_users_per_band_per_stage": 7605
+        }
+      ],
+      "limitations": "Normal approximation; variance assumptions, not estimates for HN. Needs sparse-outcome simulation and date clustering before an efficacy protocol. Zero observed v3 variance is not zero future variance."
+    }
+  },
+  "validation": {
+    "run_id": "engineering",
+    "provenance": {
+      "git_commit": "90d2dc1e1af31a714866372de5c8eb45ac6d0faf",
+      "worktree_dirty": false,
+      "source_sha256": "35f5544c3d4c3e75013a7186aa17a6c775ae426da370a22e8e92a271736ab6fa"
+    },
+    "passed": true,
+    "commands": [
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "exit_code": 0,
+        "log": "validation-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "run",
+          "build"
+        ],
+        "exit_code": 0,
+        "log": "validation-1.log"
+      },
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "src",
+          "tests",
+          "scripts"
+        ],
+        "exit_code": 0,
+        "log": "validation-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "test"
+        ],
+        "exit_code": 0,
+        "log": "validation-3.log"
+      }
+    ],
+    "browser": {
+      "startTime": "2026-10-29T08:33:36.213Z",
+      "duration": 9005.710000000001,
+      "expected": 10,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "python_passed": 83,
+  "browser_passed": 10,
+  "observer": {
+    "source_commit": "90d2dc1e1af31a714866372de5c8eb45ac6d0faf",
+    "files": {
+      "src/signalfeed/__init__.py": "476146bbf41d248ab34d66a49417685a5434f7a3e49b41e6e0aaa400452c79bd",
+      "src/signalfeed/temporal_audit.py": "f3e35a38802a361b66fc4f97b7392fc0fde444dc4a8a32c836d2c27561ec6e3f",
+      "src/signalfeed/snapshots.py": "a39688cc7cacc23dda5aebfa04b6a15e1688564714d42287e85a679ba746e009",
+      "scripts/audit_feedback.py": "33e7f4c7595c859f809127f330c0f51b1312ceb9068b126447fb0ce1ad811862",
+      "configs/temporal_v4.json": "0b6540c69f3ca8d4f74d1e5629104eb4d48e3bb8d30d5e657ac37f986f83634b"
+    },
+    "command": [
+      "tmux",
+      "new-session",
+      "-d",
+      "-s",
+      "signalfeed-temporal-v4",
+      "-c",
+      "/home/zhuzy/projects/SignalFeed",
+      "env",
+      "PYTHONPATH=/data1/zhuzy/signalfeed/temporal-v4/observer-source/src",
+      "OPENBLAS_NUM_THREADS=1",
+      "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+      "/data1/zhuzy/signalfeed/temporal-v4/observer-source/scripts/audit_feedback.py",
+      "--db",
+      "/data1/zhuzy/signalfeed/online.sqlite",
+      "--output",
+      "/data1/zhuzy/signalfeed/temporal-v4/daily",
+      "--protocol",
+      "/data1/zhuzy/signalfeed/temporal-v4/observer-source/configs/temporal_v4.json",
+      "--watch",
+      "--log",
+      "/data1/zhuzy/signalfeed/temporal-v4/observer.log"
+    ],
+    "verified_import": "/data1/zhuzy/signalfeed/temporal-v4/observer-source/src/signalfeed/temporal_audit.py",
+    "validation_sha256": "b960ffb0a48877eaece8ccad1a6002545fb2d352c05e25001e05edb8adad1f79",
+    "session": "signalfeed-temporal-v4",
+    "close_at": "2026-11-23T00:10:00Z",
+    "source_read_only": true,
+    "training": false,
+    "promotion": false
+  },
+  "first_observer_capture": "daily/20261029T083435.243810Z",
+  "observer_processes": "    PID                  STARTED COMMAND\n  24292 Thu Oct 29 16:34:34 2026 /home/zhuzy/projects/SignalFeed/.venv/bin/python /data1/zhuzy/signalfeed/temporal-v4/observer-source/scripts/audit_feedback.py --db /data1/zhuzy/signalfeed/online.sqlite --output /data1/zhuzy/signalfeed/temporal-v4/daily --protocol /data1/zhuzy/signalfeed/temporal-v4/observer-source/configs/temporal_v4.json --watch --log /data1/zhuzy/signalfeed/temporal-v4/observer.log\n3676922 Thu Oct 29 05:15:11 2026 .venv/bin/python -m signalfeed.cli serve --port 8768\n3683350 Thu Oct 29 05:25:29 2026 /data1/zhuzy/signalfeed/venv/bin/python /data1/zhuzy/signalfeed/coldfuse-live/venv/bin/signalfeed serve\n",
+  "next_capture_utc": "2026-10-30T00:10:00Z",
+  "observer_close_utc": "2026-11-23T00:10:00Z",
+  "immutable_artifacts": {
+    "baseline-final/audit.json": "59d90c4bae2fdf9d6d771ca489c82fe870c7e63fc1db8015694a198fc939e504",
+    "baseline-final/completed.json": "4701ef4222339a94e22612c75e571c3fc2bac7991e2f1196375bec0e546c2f04",
+    "baseline-final/reserved-users.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baseline-final/source.sqlite": "6ba1e06f09631e09e1a4f67073b7c716a376b3a1cb487d8027f6eeabb47160df",
+    "baseline-final/source.sqlite-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "baseline-final/source.sqlite-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "daily/20261029T083435.243810Z/audit.json": "c7112a2736e64f0d074d21bb524b6eef3404a36f1f7060b7c04bcd9084f9cb60",
+    "daily/20261029T083435.243810Z/completed.json": "95017aa8c3de1b8eac2f4f26da74b70e5732368f0d46587eee4df75d2623bb8b",
+    "daily/20261029T083435.243810Z/reserved-users.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "daily/20261029T083435.243810Z/source.sqlite": "6ba1e06f09631e09e1a4f67073b7c716a376b3a1cb487d8027f6eeabb47160df",
+    "daily/20261029T083435.243810Z/source.sqlite-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "daily/20261029T083435.243810Z/source.sqlite-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "daily/observer.json": "dd9c7826d888c579d79b37603bd629d960e472ceb8a83370930d1123d56eae2a",
+    "engineering/reports/browser-tests.json": "686f884a844b1caf02b8c1557f0b60dbef5ae5fc5c6b4e709204163fcf926e61",
+    "engineering/reports/validation-0.log": "a09647b415713a423f7d1a2083055418c1e7dbadd560b7939970ef84bc6c9897",
+    "engineering/reports/validation-1.log": "9335e1756d696763cfa856caecd5fabf3b2ddf8e71b6944003338a53b900e4b2",
+    "engineering/reports/validation-2.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "engineering/reports/validation-3.log": "ceca52f7c149442c14bbb7fb3bbdc3f82264326512fe2ccc9e9fdaaccdaf1c25",
+    "engineering/reports/validation.json": "b960ffb0a48877eaece8ccad1a6002545fb2d352c05e25001e05edb8adad1f79",
+    "observer-launch.json": "0a3f88c7d84131a222dfe397e691790c3981cbd64ffe30cf771677d04c86d30d",
+    "observer-source/configs/temporal_v4.json": "0b6540c69f3ca8d4f74d1e5629104eb4d48e3bb8d30d5e657ac37f986f83634b",
+    "observer-source/scripts/audit_feedback.py": "33e7f4c7595c859f809127f330c0f51b1312ceb9068b126447fb0ce1ad811862",
+    "observer-source/src/signalfeed/__init__.py": "476146bbf41d248ab34d66a49417685a5434f7a3e49b41e6e0aaa400452c79bd",
+    "observer-source/src/signalfeed/snapshots.py": "a39688cc7cacc23dda5aebfa04b6a15e1688564714d42287e85a679ba746e009",
+    "observer-source/src/signalfeed/temporal_audit.py": "f3e35a38802a361b66fc4f97b7392fc0fde444dc4a8a32c836d2c27561ec6e3f",
+    "observer-startup.log": "ef029294169286164ce53fcebd794135807a92e23a519301eedc6fe89a09f1d2",
+    "previous-data-diagnosis/diagnosis.json": "9fdf6739f471e4be83d2184c675f5c2108d7c883349804154c74026b2e09fca3"
+  },
+  "artifact_root": "artifacts/temporal-v4",
+  "previous_v3_report_hashes_verified": {
+    "docs/INTEREST_V3_ANALYSIS.md": "b9df4c0013930993044a24d48843816d41545db8e335e55945e0b1ffd4e0c80a",
+    "docs/INTEREST_V3_METRICS.csv": "6dd280033aef49d0cbfe3c26c1e80a95321e1f8a8b4a9a17e05958cf24cb8f83",
+    "docs/INTEREST_V3_PROTOCOL.md": "d640d08195dc3cf17a01af1d78e1bb063f468c87b0f065adcdf356e2fda08969",
+    "docs/INTEREST_V3_RESULTS.md": "aee58a61453c9b5fd7f05827c182fb1b9b9b8972215d33c1819636d1e6e57f8f",
+    "docs/interest_v3_results.json": "cbb0e28317a9edcf9dc3a271c81e61268780dae5bcdd71fec3acdd6dd922b330"
+  },
+  "documentation": {
+    "docs/TEMPORAL_V4_PROTOCOL.md": "4e715f671607d71440c62b121e5621dc8a80bbb57fbea82748ef516106916037",
+    "docs/TEMPORAL_V4_AUDIT.md": "05d0fed26fc46ecadf293cb89457829c0697e2fba0e305801792bcc74c7bc491",
+    "configs/temporal_v4.json": "0b6540c69f3ca8d4f74d1e5629104eb4d48e3bb8d30d5e657ac37f986f83634b"
+  },
+  "boundaries": {
+    "new_model": false,
+    "generative_fusion": false,
+    "production_policy_changed": false,
+    "database_schema_changed": false,
+    "website_restarted": false,
+    "remote_pushed": false,
+    "full_catalog_replay_supported": false,
+    "efficacy_authorized": false
+  },
+  "privacy": "Only aggregate reports in Git; SQLite backups and hashed per-user reservations are private local artifacts",
+  "dynamic_files": "observer.log and future daily capture directories intentionally not sealed as immutable"
+}
