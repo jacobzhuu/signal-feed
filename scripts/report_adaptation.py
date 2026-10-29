@@ -295,7 +295,11 @@ def report(root, output):
                 slices = [
                     "known_train" if r["known_large_train"] else "unseen_train",
                     "first_request" if r["first_dev_request"] else "later_request",
-                    "coherent" if r["coherence"] >= 0.5 else "mixed",
+                    "no_history"
+                    if not r["observed"]
+                    else "coherent"
+                    if r["coherence"] >= 0.5
+                    else "mixed",
                     "early_time" if r["time"] <= medtime else "late_time",
                 ]
                 for slice_name in slices:
