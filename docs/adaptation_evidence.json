@@ -1,0 +1,124 @@
+{
+  "validation": {
+    "run_id": "engineering-completed",
+    "provenance": {
+      "git_commit": "ed9e5a7995cccbea9b7083f07b0f5dc4e850f731",
+      "worktree_dirty": true,
+      "source_sha256": "557d9a8dfc85da91eb38f907eb6e34445d368342bbb627bbee236fe38d5d8a73"
+    },
+    "passed": true,
+    "commands": [
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "exit_code": 0,
+        "log": "validation-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "run",
+          "build"
+        ],
+        "exit_code": 0,
+        "log": "validation-1.log"
+      },
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "src",
+          "tests",
+          "scripts"
+        ],
+        "exit_code": 0,
+        "log": "validation-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "test"
+        ],
+        "exit_code": 0,
+        "log": "validation-3.log"
+      }
+    ],
+    "browser": {
+      "startTime": "2026-10-29T06:16:47.136Z",
+      "duration": 11339.766,
+      "expected": 10,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "cost_host": {
+    "measured_at": "2026-10-29T05:55:17.367333+00:00",
+    "cpu": {
+      "model name": "Intel(R) Xeon(R) Gold 5220R CPU @ 2.20GHz",
+      "siblings": "48",
+      "cpu cores": "24"
+    },
+    "logical_cpus": 48,
+    "allowed_cpus": 48,
+    "python": "3.11.16",
+    "platform": "Linux-5.15.0-139-generic-x86_64-with-glibc2.31",
+    "loadavg_snapshot": [
+      3.13,
+      4.42,
+      5.63
+    ],
+    "scope": "Mid-run metadata snapshot on a shared host; not a resource-isolated latency guarantee"
+  },
+  "discarded_cost_attempt": {
+    "reason": "A previously queued tmux cost job and a new continuation watcher started together. Both interrupted before any completed cost artifact; final measurement rerun alone.",
+    "logs": [
+      "logs/standalone-cost.log",
+      "logs/inference-cost.log"
+    ],
+    "completed_cost_artifacts": false,
+    "predictions_unchanged": true,
+    "rerun_log": "logs/inference-cost-single.log"
+  },
+  "final_report_source": {
+    "git_commit": "ed9e5a7995cccbea9b7083f07b0f5dc4e850f731",
+    "worktree_dirty": false,
+    "source_sha256": "557d9a8dfc85da91eb38f907eb6e34445d368342bbb627bbee236fe38d5d8a73"
+  },
+  "file_sha256": {
+    "ADAPTATION_RESULTS.md": "51711279d29d041b4fc5a6c66d9975f5995c91eabdb6e7e6dbcffcc726fb96b8",
+    "ADAPTATION_METRICS.csv": "4fbb93e99d6f7e0d0f77055e20d16c0a669a16fac547173a265c57a90353925a",
+    "adaptation_results.json": "955cb483d40d7b65b82ac43387e43f15f59f3009adbb083cecca407ab51d98ee",
+    "adaptation_learning_curves.png": "f88f3b8bef7c9c6d39c0c383b19db15f8fbd5b8a713427bd8cb5074eac4d5119",
+    "adaptation_learning_curves.svg": "d2c52aa195cf34b1beabb4d10d38970023664d818a055cf717f86794622e5e3a",
+    "adaptation_natural_cohorts.png": "e2ac3713da4e0f4d1a8176932e1b5a0e643ac22887c1ae7cc3256d3f2ad0e65d",
+    "adaptation_natural_cohorts.svg": "ff15dce1354dca3f5b5d047c1f61a6a497a9f7d173b09277c9f00cfb3c4367c2"
+  },
+  "positive_target_audit": {
+    "main": {
+      "users": 1200,
+      "positive_exposures": 2043,
+      "new_catalog_positive_exposures": 0
+    },
+    "natural": {
+      "users": 600,
+      "positive_exposures": 794,
+      "new_catalog_positive_exposures": 0
+    }
+  },
+  "notes": [
+    "Validation worktree_dirty is true because generated report artifacts were untracked; no algorithm changes.",
+    "Full raw predictions, per-command logs, identity maps and failed runs remain in artifacts/adaptation-v2 and adaptation-v1.",
+    "No production policy promotion; no remote push."
+  ]
+}
