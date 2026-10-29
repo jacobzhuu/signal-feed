@@ -306,7 +306,12 @@ def report(root, output):
                 corrected_cf = independent_metrics(
                     r["variants"]["itemcf"], r["targets"], r["labels"], cf_scores
                 )
-                if corrected_cf["auc"] != r["metrics"]["itemcf"]["auc"]:
+                if (
+                    repeated
+                    and corrected_cf["auc"] is not None
+                    and abs(corrected_cf["auc"] - r["metrics"]["itemcf"]["auc"])
+                    > 1e-12
+                ):
                     changed_cf_auc.add((g, r["user"]))
                 for group in aliases:
                     for metric in ("auc", "mrr", "ndcg5", "ndcg10"):
