@@ -153,3 +153,50 @@ def test_guard_counts_users_not_seeds_or_budget_instances(tmp_path, monkeypatch)
     decision = json.loads((tmp_path / "guard.json").read_text())
     assert decision["groups"]["no_prior/2-5"]["n"] == 40
     assert not decision["groups"]["no_prior/2-5"]["accepted"]
+
+
+def test_adaptation_collector_scores_duplicate_history_consistently(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from scipy.sparse import csr_matrix
+    import torch
+    import signalfeed.adaptation_experiments as exp
+
+    x = np.eye(3, dtype="float32")
+    cf = csr_matrix([[0.0, 1.0, 2.0], [1.0, 0.0, 3.0], [2.0, 3.0, 0.0]])
+    f = SimpleNamespace(
+        x=x,
+        cf=cf,
+        pop=np.zeros(3),
+        codes=np.zeros((3, 3), dtype=int),
+        index={"a": 0, "b": 1, "c": 2},
+        first=np.zeros(3),
+        history=lambda r: [0, 0, 1],
+    )
+    row = dict(
+        id="r",
+        user="u",
+        time=1,
+        items=["a", "b", "c"],
+        labels=[0, 0, 1],
+        known_large_train=False,
+        first_dev_request=True,
+    )
+    monkeypatch.setattr(exp, "extended", lambda root: (f, None, dict(old_items=3)))
+    monkeypatch.setattr(exp, "load_rows", lambda root, split: [("natural", row)])
+    monkeypatch.setattr(exp, "load", lambda seed: lambda x: torch.zeros(len(x)))
+    monkeypatch.setattr(
+        exp,
+        "Generator",
+        lambda seed: SimpleNamespace(generate=lambda *args, **kwargs: []),
+    )
+    monkeypatch.setattr(exp, "path", lambda *args: tmp_path)
+    monkeypatch.setattr(exp, "sha256", lambda path: "hash")
+    monkeypatch.setattr(exp, "data_identity", lambda: {})
+    (tmp_path / "coldfuse.json").write_text(json.dumps(dict(config={})))
+    (tmp_path / "reports").mkdir()
+    exp.collect(tmp_path, "select", 42)
+    result = json.loads((tmp_path / "reports/select-42/predictions.jsonl").read_text())
+    assert result["scores"]["itemcf"] == [1.0, 1.0, 5.0]
+    assert result["variants"]["itemcf"] == [2]

@@ -395,7 +395,7 @@ def test_itemcf_candidate_exposure_duplicate_history_contract():
     from scipy.sparse import csr_matrix
     from signalfeed.coldfuse import canonical_history, itemcf_scores
 
-    cf = csr_matrix(np.arange(25 * 25, dtype='float32').reshape(25, 25))
+    cf = csr_matrix(np.arange(25 * 25, dtype="float32").reshape(25, 25))
     history = list(range(24)) + [3, 3, 21]
     expected = canonical_history(history)
     assert len(expected) == 20 and expected[-2:] == [3, 21]
@@ -403,3 +403,38 @@ def test_itemcf_candidate_exposure_duplicate_history_contract():
     assert np.array_equal(dense, np.asarray(cf[expected].sum(0)).ravel())
     assert np.array_equal(itemcf_scores(cf, history, [0, 4, 24]), dense[[0, 4, 24]])
     assert itemcf_scores(cf, [], [1, 2]).tolist() == [0, 0]
+
+
+def test_cold_evaluator_uses_candidate_history_for_exposure():
+    from types import SimpleNamespace
+    from scipy.sparse import csr_matrix
+    import torch
+    from signalfeed.coldfuse import state
+    from signalfeed.cold_experiments import baselines
+
+    x = np.eye(3, dtype="float32")
+    cf = csr_matrix([[0.0, 1.0, 2.0], [1.0, 0.0, 3.0], [2.0, 3.0, 0.0]])
+    f = SimpleNamespace(
+        x=x,
+        cf=cf,
+        pop=np.zeros(3),
+        news=[dict(id=str(i)) for i in range(3)],
+        matrix=lambda r, ids, stats: np.zeros((len(ids), 1), dtype="float32"),
+    )
+    h = [0, 0, 1]
+    ctx = dict(
+        state=state(x, h),
+        channels=dict(
+            lists=dict(popular=[2], content=[2], itemcf=[2], generated=[]), exact=[]
+        ),
+    )
+    _, scores = baselines(
+        f,
+        None,
+        ctx,
+        h,
+        [0, 1, 2],
+        lambda x: torch.zeros(len(x)),
+        dict(threshold=5, weight=1),
+    )
+    assert scores["itemcf"] == [1.0, 1.0, 5.0]
