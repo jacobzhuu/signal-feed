@@ -1,0 +1,726 @@
+{
+  "status": "bounded_optimization_complete_stop_latency_and_storage_not_admitted",
+  "baseline_commit": "24e974c",
+  "protocol_commit": "edeb8da",
+  "implementation_commit": "fe5fb2b",
+  "report_fix_and_validation_commit": "f4e53f0bb7d9cefd354b031fd7b66e5daa21116a",
+  "source_identity": {
+    "git_commit": "f4e53f0bb7d9cefd354b031fd7b66e5daa21116a",
+    "worktree_dirty": false,
+    "source_sha256": "e9826f5a1491d435ce35d2c558cc997830d09756531c93ab282a28e4a36a5f46"
+  },
+  "benchmark": {
+    "provenance": {
+      "git_commit": "f4e53f0bb7d9cefd354b031fd7b66e5daa21116a",
+      "worktree_dirty": false,
+      "source_sha256": "e9826f5a1491d435ce35d2c558cc997830d09756531c93ab282a28e4a36a5f46"
+    },
+    "synthetic_only": true,
+    "efficacy_authorized": false,
+    "deployed": false,
+    "baseline": "c1d6296",
+    "frozen_files": {
+      "serving.py": "6c2c95081da10620073dfb5e906c5ebb2e506f6a31eaef51c28193e66db42627",
+      "catalog_replay.py": "cf99efe5da2090db8ea7524089e2877548d66796921079cebb8e5acf9a2ad699"
+    },
+    "source_inputs": {
+      "results.json": "3d393f29b00b2f255824cb3703c994734b39dbc3a4dcc81754a58daddab0fc16",
+      "timings.jsonl": "385b93bd104667776fba5e6a8b7b2e57ec361e40970562046611ead26fbd8c6b",
+      "isolated.sqlite": "e880d6af607719d9fc8f6d2db1e09070ccaa4d3d3ff25bb8e142439191f30611"
+    },
+    "catalog_version": "444b0dc715d648adef8cae98c276f78f76a88827870bba85f7c5f170f4195b78",
+    "catalog_items": 2006,
+    "requests": 120,
+    "latency_ms": {
+      "all": {
+        "plain": {
+          "p50": 4.860789980739355,
+          "p95": 6.574607873335481,
+          "maximum": 8.40674713253975
+        },
+        "file_v5": {
+          "p50": 68.08344391174614,
+          "p95": 83.67829089984295,
+          "maximum": 351.6208762302995
+        },
+        "file_batched": {
+          "p50": 59.1222255025059,
+          "p95": 82.64512631576505,
+          "maximum": 136.9800390675664
+        },
+        "sqlite": {
+          "p50": 47.60986054316163,
+          "p95": 59.15690031833945,
+          "maximum": 134.9370782263577
+        },
+        "file_v5_overhead": {
+          "p50": 63.316617626696825,
+          "p95": 78.5614621825516,
+          "maximum": 346.7716621235013
+        },
+        "file_batched_overhead": {
+          "p50": 53.97027498111129,
+          "p95": 77.77943657711147,
+          "maximum": 132.02567119151354
+        },
+        "sqlite_overhead": {
+          "p50": 42.75686596520245,
+          "p95": 54.8824380384758,
+          "maximum": 129.76818764582276
+        }
+      },
+      "0": {
+        "plain": {
+          "p50": 4.586760886013508,
+          "p95": 6.343744602054358,
+          "maximum": 7.748028263449669
+        },
+        "file_v5": {
+          "p50": 66.78538164123893,
+          "p95": 83.74306096229704,
+          "maximum": 93.98772707208991
+        },
+        "file_batched": {
+          "p50": 56.8462994415313,
+          "p95": 68.25044231954965,
+          "maximum": 107.36479796469212
+        },
+        "sqlite": {
+          "p50": 47.98165219835937,
+          "p95": 57.61750603560358,
+          "maximum": 58.84905206039548
+        },
+        "file_v5_overhead": {
+          "p50": 62.14303360320628,
+          "p95": 78.45496786758305,
+          "maximum": 89.24635639414191
+        },
+        "file_batched_overhead": {
+          "p50": 52.29247943498194,
+          "p95": 63.02721472457054,
+          "maximum": 103.92073728144169
+        },
+        "sqlite_overhead": {
+          "p50": 43.29855367541313,
+          "p95": 53.070232341997325,
+          "maximum": 54.10768138244748
+        }
+      },
+      "1": {
+        "plain": {
+          "p50": 4.84517146833241,
+          "p95": 6.234128098003567,
+          "maximum": 7.688845973461866
+        },
+        "file_v5": {
+          "p50": 68.2943812571466,
+          "p95": 76.59863836597653,
+          "maximum": 92.69232582300901
+        },
+        "file_batched": {
+          "p50": 58.448751689866185,
+          "p95": 67.28546991944314,
+          "maximum": 89.86879326403141
+        },
+        "sqlite": {
+          "p50": 47.72263811901212,
+          "p95": 58.54987024795265,
+          "maximum": 65.00601721927524
+        },
+        "file_v5_overhead": {
+          "p50": 63.011067220941186,
+          "p95": 71.8399687903002,
+          "maximum": 87.76635676622391
+        },
+        "file_batched_overhead": {
+          "p50": 53.61008062027395,
+          "p95": 62.43040114641191,
+          "maximum": 84.9901121109724
+        },
+        "sqlite_overhead": {
+          "p50": 42.89799020625651,
+          "p95": 53.60069756861777,
+          "maximum": 60.08004816249013
+        }
+      },
+      "3": {
+        "plain": {
+          "p50": 4.854027414694428,
+          "p95": 5.213650292716921,
+          "maximum": 6.580587942153215
+        },
+        "file_v5": {
+          "p50": 67.71683134138584,
+          "p95": 91.24260649550726,
+          "maximum": 351.6208762302995
+        },
+        "file_batched": {
+          "p50": 64.70731599256396,
+          "p95": 75.77608181163669,
+          "maximum": 82.26951817050576
+        },
+        "sqlite": {
+          "p50": 47.38343064673245,
+          "p95": 56.55834553763272,
+          "maximum": 77.97481492161751
+        },
+        "file_v5_overhead": {
+          "p50": 62.905668979510665,
+          "p95": 86.30228459369411,
+          "maximum": 346.7716621235013
+        },
+        "file_batched_overhead": {
+          "p50": 59.846614487469196,
+          "p95": 70.92638637404889,
+          "maximum": 77.41067744791508
+        },
+        "sqlite_overhead": {
+          "p50": 42.52840019762516,
+          "p95": 50.0616588862613,
+          "maximum": 73.07225279510021
+        }
+      },
+      "5": {
+        "plain": {
+          "p50": 4.926115274429321,
+          "p95": 6.3672605669125915,
+          "maximum": 6.574293132871389
+        },
+        "file_v5": {
+          "p50": 69.81343496590853,
+          "p95": 86.55785438604667,
+          "maximum": 281.8064368329942
+        },
+        "file_batched": {
+          "p50": 59.650511015206575,
+          "p95": 67.29191010817887,
+          "maximum": 89.78168107569218
+        },
+        "sqlite": {
+          "p50": 47.819457948207855,
+          "p95": 72.32720374595375,
+          "maximum": 97.77171397581697
+        },
+        "file_v5_overhead": {
+          "p50": 64.59731073118746,
+          "p95": 81.77926228381708,
+          "maximum": 276.81061578914523
+        },
+        "file_batched_overhead": {
+          "p50": 54.71851164475083,
+          "p95": 62.39612670615317,
+          "maximum": 84.78586003184319
+        },
+        "sqlite_overhead": {
+          "p50": 42.76385297998786,
+          "p95": 67.36339319031687,
+          "maximum": 91.41534985974431
+        }
+      },
+      "10": {
+        "plain": {
+          "p50": 4.856843035668135,
+          "p95": 7.2644876316189775,
+          "maximum": 8.40674713253975
+        },
+        "file_v5": {
+          "p50": 68.9011795911938,
+          "p95": 83.68169136811049,
+          "maximum": 100.2395530231297
+        },
+        "file_batched": {
+          "p50": 56.8537418730557,
+          "p95": 100.644152215682,
+          "maximum": 136.9800390675664
+        },
+        "sqlite": {
+          "p50": 47.20110027119517,
+          "p95": 61.66069824248558,
+          "maximum": 134.9370782263577
+        },
+        "file_v5_overhead": {
+          "p50": 64.232197124511,
+          "p95": 78.94450570456685,
+          "maximum": 95.42722720652819
+        },
+        "file_batched_overhead": {
+          "p50": 52.12002573534846,
+          "p95": 95.74688873253766,
+          "maximum": 132.02567119151354
+        },
+        "sqlite_overhead": {
+          "p50": 42.39674238488078,
+          "p95": 58.3668450126425,
+          "maximum": 129.76818764582276
+        }
+      },
+      "25": {
+        "plain": {
+          "p50": 4.944510292261839,
+          "p95": 5.604441626928748,
+          "maximum": 6.737838964909315
+        },
+        "file_v5": {
+          "p50": 69.59404819644988,
+          "p95": 76.07730119489135,
+          "maximum": 100.7097726687789
+        },
+        "file_batched": {
+          "p50": 61.5839168895036,
+          "p95": 67.63500359375033,
+          "maximum": 97.84522699192166
+        },
+        "sqlite": {
+          "p50": 47.60177060961723,
+          "p95": 51.314114336855724,
+          "maximum": 73.06671375408769
+        },
+        "file_v5_overhead": {
+          "p50": 64.35031071305275,
+          "p95": 71.13243036437781,
+          "maximum": 95.79271636903286
+        },
+        "file_batched_overhead": {
+          "p50": 56.50024930946529,
+          "p95": 62.744925590232036,
+          "maximum": 92.71897608414292
+        },
+        "sqlite_overhead": {
+          "p50": 42.65167145058513,
+          "p95": 46.275673713535085,
+          "maximum": 68.0948169901967
+        }
+      }
+    },
+    "small_request_bytes": {
+      "file_v5": {
+        "p50": 7611.0,
+        "p95": 11157.0,
+        "maximum": 11236.0
+      },
+      "file_batched": {
+        "p50": 7611.0,
+        "p95": 11157.0,
+        "maximum": 11236.0
+      },
+      "sqlite": {
+        "p50": 7611.0,
+        "p95": 11157.0,
+        "maximum": 11236.0
+      }
+    },
+    "small_sqlite_physical_growth_bytes": {
+      "p50": 20600.0,
+      "p95": 37080.0,
+      "maximum": 37080.0
+    },
+    "storage": {
+      "initial": {
+        "requests.sqlite": 4096,
+        "requests.sqlite-wal": 8272,
+        "requests.sqlite-shm": 32768
+      },
+      "initial_allocated": {
+        "requests.sqlite": 4096,
+        "requests.sqlite-wal": 12288,
+        "requests.sqlite-shm": 32768
+      },
+      "before_checkpoint": {
+        "requests.sqlite": 4096,
+        "requests.sqlite-wal": 2653312,
+        "requests.sqlite-shm": 32768
+      },
+      "before_checkpoint_allocated": {
+        "requests.sqlite": 4096,
+        "requests.sqlite-wal": 2658304,
+        "requests.sqlite-shm": 32768
+      },
+      "after_checkpoint": {
+        "requests.sqlite": 1105920,
+        "requests.sqlite-wal": 0,
+        "requests.sqlite-shm": 32768
+      },
+      "after_checkpoint_allocated": {
+        "requests.sqlite": 1105920,
+        "requests.sqlite-wal": 0,
+        "requests.sqlite-shm": 32768
+      },
+      "checkpoint_ms": 64.25357004627585,
+      "checkpoint_result": [
+        0,
+        0,
+        0
+      ],
+      "acknowledged_records_before_future": 121,
+      "amortized_before_checkpoint_bytes": 21859.834710743802
+    },
+    "catalog_registration_ms": {
+      "file_v5": 418.3958531357348,
+      "file_batched": 833.6996589787304,
+      "sqlite": 277.0629501901567
+    },
+    "sqlite_replay_ms": {
+      "p50": 5.299868527799845,
+      "p95": 5.851856153458357,
+      "maximum": 6.026063114404678
+    },
+    "sqlite_cold_reader_ms": 39.656038861721754,
+    "exact_matches_per_recorder": 120,
+    "old_records_preserved_after_future_per_recorder": 120,
+    "environment": {
+      "sqlite": "3.53.1",
+      "numpy": "1.26.4",
+      "python": "3.11.16 (main, Sep 29 2026, 14:59:26) [Clang 22.1.3 ]",
+      "blas_threads": 1
+    },
+    "gates": {
+      "capture_overhead_p95_limit_ms": 10,
+      "capture_overhead_pass": false,
+      "small_request_limit_bytes": 32768,
+      "small_request_pass": false
+    },
+    "limitations": [
+      "Frozen actual vectors and explicit vectors; encoding excluded as in warm v5 serving",
+      "Sequential 120 synthetic requests on shared CPU; not concurrency capacity evidence",
+      "FULL synchronous commits, default 1000-page autocheckpoint retained; explicit checkpoint timed separately",
+      "Storage includes WAL and SHM; allocated filesystem blocks also reported separately",
+      "Same numerical environment only; new reader does not evict OS page cache"
+    ]
+  },
+  "profile_summary": [
+    {
+      "function": "<built-in method posix.fsync>",
+      "mean_exclusive_ms": 52.286433916666674,
+      "mean_cumulative_ms": 52.286433916666674
+    },
+    {
+      "function": "catalog_rows",
+      "mean_exclusive_ms": 10.787978800000001,
+      "mean_cumulative_ms": 17.512605774999997
+    },
+    {
+      "function": "<listcomp>",
+      "mean_exclusive_ms": 3.5309819916666685,
+      "mean_cumulative_ms": 4.034365458333336
+    },
+    {
+      "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+      "mean_exclusive_ms": 3.450986308333332,
+      "mean_cumulative_ms": 3.450986308333332
+    },
+    {
+      "function": "<method 'all' of 'numpy.ndarray' objects>",
+      "mean_exclusive_ms": 1.2727337583333334,
+      "mean_cumulative_ms": 5.433700266666667
+    },
+    {
+      "function": "<method 'get' of 'dict' objects>",
+      "mean_exclusive_ms": 0.9058360416666669,
+      "mean_cumulative_ms": 0.9058360416666669
+    },
+    {
+      "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+      "mean_exclusive_ms": 0.8210361250000006,
+      "mean_cumulative_ms": 0.8210361250000006
+    },
+    {
+      "function": "_all",
+      "mean_exclusive_ms": 0.7330261499999998,
+      "mean_cumulative_ms": 4.160966508333334
+    },
+    {
+      "function": "recommend",
+      "mean_exclusive_ms": 0.6587335666666667,
+      "mean_cumulative_ms": 79.792010425
+    },
+    {
+      "function": "<built-in method builtins.max>",
+      "mean_exclusive_ms": 0.5160859250000003,
+      "mean_cumulative_ms": 0.5160859250000003
+    },
+    {
+      "function": "iterencode",
+      "mean_exclusive_ms": 0.49261696666666666,
+      "mean_cumulative_ms": 0.49261696666666666
+    },
+    {
+      "function": "_register",
+      "mean_exclusive_ms": 0.40631963333333326,
+      "mean_cumulative_ms": 17.919172583333324
+    },
+    {
+      "function": "<method 'argsort' of 'numpy.ndarray' objects>",
+      "mean_exclusive_ms": 0.30363561666666683,
+      "mean_cumulative_ms": 0.30363561666666683
+    },
+    {
+      "function": "<setcomp>",
+      "mean_exclusive_ms": 0.2042034166666666,
+      "mean_cumulative_ms": 0.2042034166666666
+    },
+    {
+      "function": "<setcomp>",
+      "mean_exclusive_ms": 0.20392713333333332,
+      "mean_cumulative_ms": 0.20392713333333332
+    },
+    {
+      "function": "<method 'append' of 'list' objects>",
+      "mean_exclusive_ms": 0.20055195000000003,
+      "mean_cumulative_ms": 0.20055195000000003
+    },
+    {
+      "function": "<method 'update' of '_hashlib.HASH' objects>",
+      "mean_exclusive_ms": 0.19958938333333334,
+      "mean_cumulative_ms": 0.19958938333333334
+    },
+    {
+      "function": "<listcomp>",
+      "mean_exclusive_ms": 0.16018482499999998,
+      "mean_cumulative_ms": 0.16018482499999998
+    },
+    {
+      "function": "<method 'close' of 'sqlite3.Connection' objects>",
+      "mean_exclusive_ms": 0.15185287500000003,
+      "mean_cumulative_ms": 0.15185287500000003
+    },
+    {
+      "function": "<listcomp>",
+      "mean_exclusive_ms": 0.15056494999999998,
+      "mean_cumulative_ms": 0.15056494999999998
+    },
+    {
+      "function": "_capture",
+      "mean_exclusive_ms": 0.14692897500000007,
+      "mean_cumulative_ms": 72.96205064166665
+    },
+    {
+      "function": "<built-in method _sqlite3.connect>",
+      "mean_exclusive_ms": 0.10963309166666665,
+      "mean_cumulative_ms": 0.1390349583333333
+    },
+    {
+      "function": "register",
+      "mean_exclusive_ms": 0.10150350000000002,
+      "mean_cumulative_ms": 18.021343966666677
+    },
+    {
+      "function": "<built-in method numpy.array>",
+      "mean_exclusive_ms": 0.09858495833333332,
+      "mean_cumulative_ms": 0.09858495833333332
+    },
+    {
+      "function": "file_digest",
+      "mean_exclusive_ms": 0.08403544166666665,
+      "mean_cumulative_ms": 0.33302776666666684
+    }
+  ],
+  "profile_limit": "Instrumented diagnosis only; cumulative functions overlap; not admission timings",
+  "first_report_failure": {
+    "status": "report_failed_after_measurement",
+    "error": "IsADirectoryError hashing frozen-v5/__pycache__",
+    "raw_timings_retained": 120,
+    "fix": "Only hash files in frozen source directory",
+    "rerun_reason": "Reporting defect; metrics were not inspected before deciding rerun",
+    "authoritative_retry": "benchmark-fixed"
+  },
+  "first_run_paired_overhead_ms": {
+    "file_v5": {
+      "p50": 64.58709994331002,
+      "p95": 73.73269349336624
+    },
+    "file_batched": {
+      "p50": 54.314602399244905,
+      "p95": 86.92366420291364
+    },
+    "sqlite": {
+      "p50": 43.128114426508546,
+      "p95": 52.93885916471481
+    }
+  },
+  "feedback_delivery": {
+    "production_audit_time": "2026-10-29T12:27:17.432487+00:00",
+    "inventory": {
+      "users": 136,
+      "requests": 806,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "inventory_change_since_v4": {
+      "users": 0,
+      "requests": 0,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "mature_exposed_users": 0,
+    "live_log": {
+      "path": "/data1/zhuzy/signalfeed/coldfuse-live/logs/server.log",
+      "bytes": 13991,
+      "sha256": "3ba195299b39a3483fc0d5cd2f86e67fb537af845a9e4c5620346860920190b6",
+      "request_counts": {
+        "GET /api/ready": 111,
+        "GET /api/health": 11
+      },
+      "event_posts": 0,
+      "scope": "Current process log only; not proof of complete ingress coverage or absence of real visitors"
+    },
+    "frontend": {
+      "impression_rule": "visible tab, >=50% intersection for 1 second",
+      "event_retry": "at most two attempts using same UUID",
+      "source_file": "frontend/src/main.tsx",
+      "sha256": "77ac99b9d3fffe939c4919fbfc0ce080c4c44933bd3daae18d4112b252a8054e"
+    },
+    "production_source_path": "/home/zhuzy/projects/SignalFeed/src",
+    "runtime_source_limit": "Editable path and on-disk source inspected, no claim of introspecting already imported modules in production",
+    "isolated_browser": {
+      "base": "http://127.0.0.1:8768",
+      "test_database": "/data1/zhuzy/signalfeed/coldfuse-v2/browser.sqlite",
+      "events": [
+        {
+          "kind": "impression",
+          "is_test": 1,
+          "receipt_matched_database": true
+        },
+        {
+          "kind": "click",
+          "is_test": 1,
+          "receipt_matched_database": true
+        },
+        {
+          "kind": "bookmark",
+          "is_test": 1,
+          "receipt_matched_database": true
+        }
+      ],
+      "snapshot_count": 1,
+      "page_errors": []
+    },
+    "decision": "No newly observed human-traffic evidence; isolated delivery works. Do not infer a production bug or prove absence of traffic; keep algorithm studies stopped."
+  },
+  "validation": {
+    "run_id": "engineering",
+    "provenance": {
+      "git_commit": "f4e53f0bb7d9cefd354b031fd7b66e5daa21116a",
+      "worktree_dirty": false,
+      "source_sha256": "e9826f5a1491d435ce35d2c558cc997830d09756531c93ab282a28e4a36a5f46"
+    },
+    "passed": true,
+    "commands": [
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "exit_code": 0,
+        "log": "validation-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "run",
+          "build"
+        ],
+        "exit_code": 0,
+        "log": "validation-1.log"
+      },
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "src",
+          "tests",
+          "scripts"
+        ],
+        "exit_code": 0,
+        "log": "validation-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "test"
+        ],
+        "exit_code": 0,
+        "log": "validation-3.log"
+      }
+    ],
+    "browser": {
+      "startTime": "2026-10-29T12:41:29.016Z",
+      "duration": 8933.937,
+      "expected": 10,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "python_passed": 102,
+  "browser_passed": 10,
+  "fault_validation": [
+    "Shared and independent recorder concurrency",
+    "Before/after commit SIGKILL",
+    "SQLite max_page_count produces SQLITE_FULL",
+    "Injected file fsync EIO",
+    "Duplicate request identity and corrupted envelope rejected",
+    "Default content recommendation still works during recorder failure"
+  ],
+  "fault_limit": "Process crash and fault injection; no physical power-loss simulation",
+  "preserved_old_artifacts": {
+    "count": 574,
+    "mismatches": 0,
+    "audit_sha256": "dee35b57af1bac288f9e7796602adb2cfc065ef983130f4e972e8b5971b9ee5e"
+  },
+  "artifact_root": "artifacts/replay-v6",
+  "artifact_manifest": {
+    "path": "artifacts/replay-v6/artifact-manifest.json",
+    "sha256": "a1b84511725aecea1b4fd9d08772ace5c3dc2f73eaf6184095a79b68a1af3c24",
+    "files": 819
+  },
+  "key_artifacts": {
+    "profile/profile.json": "5131f679641f7c475ac618d12cb65a225626c98fa834218c69bb867351fbc47c",
+    "profile/results.json": "0c137b39085dde58897a2a3d144255f8f73c04d9f148b63709c90eeb5e8709c9",
+    "benchmark/failure.json": "c9d125d2ed39c64d8004cc97328485d1c8e58b2481cf1e0d7580b76c13055bc6",
+    "benchmark/timings.jsonl": "9f0a6629475d73696ebd57ac93e63cbe09a06aca42301de697f96de8d8927a5a",
+    "benchmark-fixed/results.json": "991ba63a6147b7484e325d8275df4e144545cda747ef39c75164adad2638b71e",
+    "benchmark-fixed/timings.jsonl": "f63b4bd7eeb8f8cc66bca481c3a23b119e68dd8b2632f117454d004b7cf8e0a6",
+    "feedback/audit.json": "0377f24e796747f7c43eee3cb16647cfaf039f2b2c026495e3102e00d82b6dd2",
+    "feedback-delivery-audit.json": "fcb2f4dc0e1aa276978fd2feb00919f7bf1db38b134144541f60e4b821827293",
+    "feedback-browser.cjs": "b7c7f4aa5f97cac8fdb67f27bac79c0628efdc71ae9fad6bc6c2d8fa26bf10fa",
+    "feedback-browser.json": "a83a373f3cba8d2bca10d84db58fa780f8253de0208604a682bc0ea0751bf6ed",
+    "engineering/reports/validation.json": "b1879db888fafb70d0987ad3f932a7558118750fd59986bb80f9ff94e58377ee",
+    "independent-cost-audit.json": "09242d988f6dcc6cd7e676cc7bdf0dc1e460810a0a3569d19a39f0a3c8f36ad0",
+    "service-state.json": "8df8d9090bb93dd9ef40f42f18185b9059821c53a18557678ba95ad593e7eff8"
+  },
+  "documentation": {
+    "docs/REPLAY_V6_PROTOCOL.md": "dd0f2f0154b412e177e41d1654af947372a2700c08f893b87dcf775bc70256e1",
+    "docs/REPLAY_V6_DECISIONS.md": "13781dc4acd1cef5e1867c0b7786ba5093dd96544f503c28ae00627638fea9b0",
+    "docs/REPLAY_V6_RESULTS.md": "1311ffc338066d3637173f9d60d8a7619d99529d9af0c028ec03b0d327278904"
+  },
+  "service": {
+    "as_of_utc": "2026-10-29T12:46:33.048173+00:00",
+    "processes": "    PID                  STARTED COMMAND\n  24292 Thu Oct 29 16:34:34 2026 /home/zhuzy/projects/SignalFeed/.venv/bin/python /data1/zhuzy/signalfeed/temporal-v4/observer-source/scripts/audit_feedback.py --db /data1/zhuzy/signalfeed/online.sqlite --output /data1/zhuzy/signalfeed/temporal-v4/daily --protocol /data1/zhuzy/signalfeed/temporal-v4/observer-source/configs/temporal_v4.json --watch --log /data1/zhuzy/signalfeed/temporal-v4/observer.log\n3676922 Thu Oct 29 05:15:11 2026 .venv/bin/python -m signalfeed.cli serve --port 8768\n3683350 Thu Oct 29 05:25:29 2026 /data1/zhuzy/signalfeed/venv/bin/python /data1/zhuzy/signalfeed/coldfuse-live/venv/bin/signalfeed serve\n",
+    "listeners": "LISTEN    0         2048             127.0.0.1:8768             0.0.0.0:*        users:((\"python\",pid=3676922,fd=10))                                           \nLISTEN    0         2048             127.0.0.1:8765             0.0.0.0:*        users:((\"signalfeed\",pid=3683350,fd=10))                                       ",
+    "restarted": false,
+    "production_events_written": false,
+    "production_api_probes_sent": false,
+    "observer_session": "signalfeed-temporal-v4",
+    "observer_next_capture_utc": "2026-10-30T00:10:00+00:00",
+    "observer_close_utc": "2026-11-23T00:10:00+00:00"
+  },
+  "decision": {
+    "stop_recorder_optimization": true,
+    "full_catalog_replay_supported_in_production": false,
+    "efficacy_authorized": false,
+    "new_algorithm_search": false,
+    "generative_quota_experiment": false,
+    "deployed": false,
+    "remote_pushed": false
+  },
+  "privacy": "Production SQLite backup remains local in restricted directory; Git contains aggregate feedback and hashes only. Browser events and benchmark users are synthetic.",
+  "hardware": "Intel(R) Xeon(R) Gold 5220R CPU @ 2.20GHz"
+}
