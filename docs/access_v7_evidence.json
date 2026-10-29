@@ -1,0 +1,354 @@
+{
+  "status": "local_access_verified_pilot_prepared_not_started",
+  "as_of_utc": "2026-10-29T16:17:28.126015+00:00",
+  "baseline_commit": "dbe2402",
+  "implementation_commit": "b8987f4dbfd5ace3d79ed674b34c5a882b14900b",
+  "source_identity": {
+    "git_commit": "b8987f4dbfd5ace3d79ed674b34c5a882b14900b",
+    "worktree_dirty": false,
+    "source_sha256": "c6fb5be3d69550aaa8b3db7d14ce23f5b11b831eff546e280c7a2a56eaa27adc"
+  },
+  "user_access_preference": "Existing local/SSH access; prepare a small pilot",
+  "entry_audit": {
+    "observed_at_utc": "2026-10-29T16:10:51.342891+00:00",
+    "base": "http://127.0.0.1:8765",
+    "before": {
+      "users": 136,
+      "requests": 806,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "after": {
+      "users": 136,
+      "requests": 806,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "inventory_delta": {
+      "users": 0,
+      "requests": 0,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "existing_empty_session_reused": true,
+    "cookie_saved": false,
+    "browser_javascript_executed": false,
+    "requests": [
+      {
+        "path": "/",
+        "status": 200,
+        "bytes": 514,
+        "content_type": "text/html; charset=utf-8",
+        "sha256": "88dab26a23ec19f02e16fd56de8d9be1930f871ebb13e0e93971eb266c37bad6"
+      },
+      {
+        "path": "/assets/index-DcJPeUv8.js",
+        "status": 200,
+        "bytes": 193770,
+        "content_type": "application/javascript",
+        "sha256": "fd94af7cd08c90c7391b02645f8d602c5b0edbb2fd2c42aba5912898d91161d2"
+      },
+      {
+        "path": "/assets/index-B1TCfadN.css",
+        "status": 200,
+        "bytes": 4836,
+        "content_type": "text/css; charset=utf-8",
+        "sha256": "45b6ef04303c713ab10e38890065f43916b359e59e65c52185b5ac1dbc18d001"
+      },
+      {
+        "path": "/api/health",
+        "status": 200,
+        "bytes": 290,
+        "content_type": "application/json",
+        "sha256": "e8cce672cce88170aa14f8d7fb15265c5dddb10eab582a17ea1243e64ba7a430"
+      },
+      {
+        "path": "/api/ready",
+        "status": 200,
+        "bytes": 290,
+        "content_type": "application/json",
+        "sha256": "e8cce672cce88170aa14f8d7fb15265c5dddb10eab582a17ea1243e64ba7a430"
+      }
+    ],
+    "health": {
+      "status": "ready",
+      "ready": true,
+      "articles": 2439,
+      "strategy": "content-v1",
+      "catalog_loaded": 2439,
+      "catalog_refreshed_at": 1793289714.7457309,
+      "catalog_error": null,
+      "model_error": null,
+      "cold_online_model_error": null,
+      "cold_online_model_version": null,
+      "test_events": false,
+      "offline_model_promoted": false
+    },
+    "all_static_bytes_match": true,
+    "log_before": {
+      "bytes": 13991,
+      "sha256": "3ba195299b39a3483fc0d5cd2f86e67fb537af845a9e4c5620346860920190b6",
+      "requests": {
+        "GET /api/ready": 111,
+        "GET /api/health": 11
+      }
+    },
+    "log_after": {
+      "bytes": 17599,
+      "sha256": "cadcf1e9b4d2df61a28381b8b59e267a5632e6f0428f6e5c94dad882f2ef893a",
+      "prefix_unchanged": true
+    },
+    "diagnostic_requests_only": true,
+    "feed_requested": false,
+    "events_posted": false,
+    "scope": "Host loopback only; no claim of an external client or SSH tunnel being exercised",
+    "script_sha256": "bfd215f82762dbfd5887ffd0927e0827c9b773467dbd397c54f5ca503c663b86"
+  },
+  "entry_context": {
+    "loopback_listeners": [
+      "LISTEN    0         2048             127.0.0.1:8768             0.0.0.0:*        users:((\"python\",pid=3676922,fd=10))                                           ",
+      "LISTEN    0         2048             127.0.0.1:8765             0.0.0.0:*        users:((\"signalfeed\",pid=3683350,fd=10))                                       "
+    ],
+    "visible_proxy_config_search": [
+      {
+        "root": "/etc/nginx",
+        "exists": false,
+        "files_examined": 0,
+        "matching_files": [],
+        "unreadable_files": 0
+      },
+      {
+        "root": "/etc/caddy",
+        "exists": false,
+        "files_examined": 0,
+        "matching_files": [],
+        "unreadable_files": 0
+      },
+      {
+        "root": "/etc/apache2",
+        "exists": true,
+        "files_examined": 1,
+        "matching_files": [],
+        "unreadable_files": 0
+      },
+      {
+        "root": "/etc/haproxy",
+        "exists": false,
+        "files_examined": 0,
+        "matching_files": [],
+        "unreadable_files": 0
+      }
+    ],
+    "scope": "Visible host configuration only; container nginx and shared host ports are not attributed to SignalFeed. No container config access, external URL, or external client validation. User selected existing local/SSH access.",
+    "processes": "    PID                  STARTED COMMAND\n  24292 Thu Oct 29 16:34:34 2026 /home/zhuzy/projects/SignalFeed/.venv/bin/python /data1/zhuzy/signalfeed/temporal-v4/observer-source/scripts/audit_feedback.py --db /data1/zhuzy/signalfeed/online.sqlite --output /data1/zhuzy/signalfeed/temporal-v4/daily --protocol /data1/zhuzy/signalfeed/temporal-v4/observer-source/configs/temporal_v4.json --watch --log /data1/zhuzy/signalfeed/temporal-v4/observer.log\n3676922 Thu Oct 29 05:15:11 2026 .venv/bin/python -m signalfeed.cli serve --port 8768\n3683350 Thu Oct 29 05:25:29 2026 /data1/zhuzy/signalfeed/venv/bin/python /data1/zhuzy/signalfeed/coldfuse-live/venv/bin/signalfeed serve\n",
+    "observer_session_present": true,
+    "observer_log_sha256": "ef029294169286164ce53fcebd794135807a92e23a519301eedc6fe89a09f1d2",
+    "external_listening_enabled": false,
+    "ssh_tunnel_started": false,
+    "messages_sent": false
+  },
+  "feedback_audit": {
+    "version": "temporal-readiness-v4",
+    "as_of": 1793290279.2410903,
+    "as_of_utc": "2026-10-29T16:11:19.241090+00:00",
+    "inventory": {
+      "users": 136,
+      "requests": 806,
+      "events": 0,
+      "request_snapshots": 0
+    },
+    "events": {},
+    "requests": {
+      "baseline_feed_requests": 406,
+      "mature_feed_requests": 406,
+      "missing_snapshot": 406,
+      "non_baseline_feed_requests": 400
+    },
+    "source_test_users": 0,
+    "mature_exposed_users": 0,
+    "mature_clicked_users": 0,
+    "daily": {
+      "2026-10-28/0": {
+        "requests": 406,
+        "mature_requests": 406,
+        "missing_snapshot": 406
+      }
+    },
+    "phases": {
+      "select": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      },
+      "guard": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      },
+      "test": {
+        "1-5": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        },
+        "10": {
+          "reserved_users": 0,
+          "mature_exposed_users": 0,
+          "dates": [],
+          "clicked_users": 0,
+          "pilot_minimum_met": false
+        }
+      }
+    },
+    "feedback_intervals_seconds": {},
+    "readiness": {
+      "status": "collecting_insufficient_feedback",
+      "feedback_pilot_minimum_met": false,
+      "full_catalog_replay_supported": false,
+      "efficacy_authorized": false,
+      "reason": "Returned-item snapshots lack a request-time full catalog and complete replay inputs"
+    },
+    "notes": [
+      "Counts marked non-test do not prove human activity or signup status",
+      "Anonymous user table has no creation time; inventory is capture-time only",
+      "Daily CTR is observational on logged exposure support, not counterfactual policy gain",
+      "Feedback interval is request-to-server-receipt, not client/network reporting delay",
+      "Strict whole-request snapshot validation; training may retain individual valid feature rows"
+    ],
+    "capture": {
+      "source_database": "/data1/zhuzy/signalfeed/online.sqlite",
+      "database_sha256": "1e4f5eed0008703b16a7ef343ff4a64cb6c9bc833c153560ea2001239f9d974c",
+      "protocol": {
+        "version": "temporal-readiness-v4",
+        "baseline_commit": "80cb25f",
+        "timezone": "UTC",
+        "user_split_salt": "signalfeed-temporal-v4/user/",
+        "label_window_seconds": 86400,
+        "snapshot_feature_version": "online-text-v2",
+        "baseline_strategy": "content-v1",
+        "phases": {
+          "select": {
+            "start": "2026-10-30T00:00:00Z",
+            "end": "2026-11-06T00:00:00Z",
+            "buckets": [
+              0,
+              1,
+              2
+            ]
+          },
+          "guard": {
+            "start": "2026-11-07T00:00:00Z",
+            "end": "2026-11-14T00:00:00Z",
+            "buckets": [
+              3,
+              4,
+              5
+            ]
+          },
+          "test": {
+            "start": "2026-11-15T00:00:00Z",
+            "end": "2026-11-22T00:00:00Z",
+            "buckets": [
+              6,
+              7,
+              8,
+              9
+            ]
+          }
+        },
+        "close_at": "2026-11-23T00:10:00Z",
+        "minimum_pilot": {
+          "users_per_band_per_phase": 200,
+          "dates_per_band_per_phase": 3,
+          "clicked_users_per_band_per_phase": 20
+        },
+        "candidate_budget": 100,
+        "primary_bands": [
+          "1-5",
+          "10"
+        ],
+        "algorithm_registered": false,
+        "efficacy_authorized": false,
+        "automatic_training": false,
+        "automatic_promotion": false
+      },
+      "algorithm": {
+        "audit_feedback.py": "33e7f4c7595c859f809127f330c0f51b1312ceb9068b126447fb0ce1ad811862",
+        "temporal_audit.py": "f3e35a38802a361b66fc4f97b7392fc0fde444dc4a8a32c836d2c27561ec6e3f",
+        "snapshots.py": "a39688cc7cacc23dda5aebfa04b6a15e1688564714d42287e85a679ba746e009",
+        "protocol.json": "0b6540c69f3ca8d4f74d1e5629104eb4d48e3bb8d30d5e657ac37f986f83634b"
+      },
+      "elapsed_seconds": 0.2649152269586921,
+      "source_open_mode": "ro; query_only; SQLite backup",
+      "snapshot_contains_private_anonymous_activity": true
+    }
+  },
+  "validation": {
+    "script_compiled": true,
+    "script_ruff_passed": true,
+    "actual_entry_audit_passed": true,
+    "all_five_http_requests_200": true,
+    "application_frontend_tests_configs_unchanged_from": "dbe2402",
+    "full_regressions_rerun": false,
+    "reason": "Only additive diagnostic script and documentation; prior 102 Python/10 browser validation retained, not claimed rerun"
+  },
+  "preserved_old_files": {
+    "checked": 1397,
+    "mismatches": 0
+  },
+  "artifact_root": "artifacts/access-v7",
+  "artifact_manifest": {
+    "path": "artifacts/access-v7/artifact-manifest.json",
+    "sha256": "17f2a43a2403e3d0dd967d6bd8452f4d7db6147951caf8a7416b710bc054261f",
+    "files": 12
+  },
+  "documentation": {
+    "docs/LOCAL_ACCESS_V7.md": "6b805c37b7da7ec9c99a957916c43a06b9ed18f5aba56fad85265b4d4a0b5841",
+    "docs/REAL_USE_PILOT_V7.md": "71be7d580721f013612bd2c7a4c39fe4ba953aed07c650f3eb8ac643db69a80d"
+  },
+  "pilot": {
+    "status": "prepared_not_started",
+    "proposed_users": "3-5 existing authorized voluntary readers",
+    "duration_days": 7,
+    "start_time": null,
+    "people_invited": 0,
+    "ssh_tunnel_started": false,
+    "outside_client_verified": false,
+    "no_click_quota": true,
+    "fixed_research_windows_unchanged": true
+  },
+  "decision": {
+    "algorithm_work_paused": true,
+    "recorder_optimization_stopped": true,
+    "new_strategy_deployed": false,
+    "full_catalog_replay_supported_in_production": false,
+    "efficacy_authorized": false,
+    "observer_unchanged": true,
+    "remote_pushed": false
+  },
+  "privacy": "No cookies stored or committed; private DB audit stays in 0700 local directory; no identifiers from real behavior included in public report."
+}
