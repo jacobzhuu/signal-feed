@@ -7,6 +7,7 @@ import os
 import errno
 from pathlib import Path
 import re
+import sqlite3
 import tempfile
 import threading
 import uuid
@@ -70,13 +71,12 @@ def catalog_rows(items):
             url=a.get("url", ""),
             domain=a.get("domain", ""),
         )
-        if (
-            row["deleted"]
-            or row["score"] < 0
-            or not np.isfinite([row["published"], row["updated"]]).all()
-        ):
-            raise ValueError("Unsupported catalog metadata")
         rows.append(row)
+    if (
+        any(a["deleted"] or a["score"] < 0 for a in rows)
+        or not np.isfinite([(a["published"], a["updated"]) for a in rows]).all()
+    ):
+        raise ValueError("Unsupported catalog metadata")
     if len({a["id"] for a in rows}) != len(rows):
         raise ValueError("Duplicate catalog identity")
     return rows
@@ -216,6 +216,11 @@ class ReplayStore:
         validate_request(record, self._catalog)
         data = canonical(record)
         envelope = canonical(dict(sha256=digest(data), record=record))
+        self._publish(request_id, envelope)
+        self.last_request = request_id
+        return request_id
+
+    def _publish(self, request_id, envelope):
         destination = self.root / "requests" / f"{request_id}.json"
         # Exclusive hard-link publishes only complete fsynced files, never replaces.
         with tempfile.NamedTemporaryFile(
@@ -230,8 +235,43 @@ class ReplayStore:
                 synced_directory(destination.parent)
             finally:
                 pending.unlink(missing_ok=True)
-        self.last_request = request_id
-        return request_id
+
+
+class SQLiteReplayStore(ReplayStore):
+    """Isolated synchronous durable request journal; never a production DB."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.connection = sqlite3.connect(
+            self.root / "requests.sqlite", timeout=15, check_same_thread=False
+        )
+        try:
+            mode = self.connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            self.connection.execute("PRAGMA synchronous=FULL")
+            if (
+                mode != "wal"
+                or self.connection.execute("PRAGMA synchronous").fetchone()[0] != 2
+            ):
+                raise ValueError("Durable WAL contract unavailable")
+            with self.connection:
+                self.connection.execute(
+                    "CREATE TABLE IF NOT EXISTS records("
+                    "id TEXT PRIMARY KEY,envelope BLOB NOT NULL) WITHOUT ROWID"
+                )
+            synced_directory(self.root)
+        except BaseException:
+            self.connection.close()
+            raise
+
+    def _publish(self, request_id, envelope):
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO records(id,envelope) VALUES(?,?)", (request_id, envelope)
+            )
+
+    def close(self):
+        with self.lock:
+            self.connection.close()
 
 
 def load_catalog(root, version):
@@ -362,9 +402,7 @@ class ReplayReader:
     def replay(self, request_id):
         if not re.fullmatch("[a-f0-9]{32}", request_id):
             raise ValueError("Invalid request identity")
-        envelope = json.loads(
-            (self.root / "requests" / f"{request_id}.json").read_bytes()
-        )
+        envelope = self.envelope(request_id)
         r = envelope["record"]
         if r["request_id"] != request_id or digest(canonical(r)) != envelope["sha256"]:
             raise ValueError("Request checksum mismatch")
@@ -390,3 +428,22 @@ class ReplayReader:
             catalog_version=version,
             source_verified=True,
         )
+
+    def envelope(self, request_id):
+        return json.loads((self.root / "requests" / f"{request_id}.json").read_bytes())
+
+
+class SQLiteReplayReader(ReplayReader):
+    def envelope(self, request_id):
+        uri = (self.root / "requests.sqlite").resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=15)
+        try:
+            connection.execute("PRAGMA query_only=ON")
+            row = connection.execute(
+                "SELECT envelope FROM records WHERE id=?", (request_id,)
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            raise FileNotFoundError(request_id)
+        return json.loads(row[0])

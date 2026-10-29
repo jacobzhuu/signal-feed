@@ -12,6 +12,18 @@ import pytest
 from signalfeed.catalog_replay import ReplayStore, ReplayReader, canonical, digest
 import signalfeed.serving as serving
 from signalfeed.store import db
+from signalfeed.catalog_replay import (
+    SQLiteReplayStore,
+    SQLiteReplayReader,
+    catalog_rows,
+)
+import errno
+import os
+import selectors
+import sqlite3
+import subprocess
+import sys
+import uuid
 
 
 def fixture_service(online_env, monkeypatch):
@@ -204,3 +216,193 @@ def test_external_prefix_reads_complete_lines_only():
         archive.addfile(member, io.BytesIO(payload))
     name, rows = mod.first_tar_lines(stream.getvalue(), limit=1)
     assert name == "dataset/day.json" and rows == [{"time": 1}]
+
+
+def test_sqlite_replay_roundtrip_and_future_changes(online_env, monkeypatch, tmp_path):
+    s, clock = fixture_service(online_env, monkeypatch)
+    store = SQLiteReplayStore(tmp_path / "wal")
+    expected = s.recommend("user", limit=100)
+    s.recommend("user", replay=store)
+    request = store.last_request
+    reader = SQLiteReplayReader(store.root)
+    before = reader.envelope(request)
+    assert reader.replay(request)["top100"] == [a["id"] for a in expected]
+    assert store.connection.execute("PRAGMA synchronous").fetchone()[0] == 2
+    clock[0] += 10
+    s.items = [dict(a, title="future", score=99) for a in s.items[:-1]]
+    s.vectors = s.vectors[:-1].copy()
+    s.vectors.setflags(write=False)
+    s.index = {a["id"]: i for i, a in enumerate(s.items)}
+    s.recommend("user", replay=store)
+    store.close()
+    assert SQLiteReplayReader(store.root).replay(request)["top100"] == [
+        a["id"] for a in expected
+    ]
+    assert SQLiteReplayReader(store.root).envelope(request) == before
+
+
+@pytest.mark.parametrize("independent", [False, True])
+def test_sqlite_concurrent_captures(online_env, monkeypatch, tmp_path, independent):
+    s, _ = fixture_service(online_env, monkeypatch)
+    stores = [
+        SQLiteReplayStore(tmp_path / "wal") for _ in range(4 if independent else 1)
+    ]
+    expected = s.recommend("user")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(
+            pool.map(
+                lambda i: s.recommend("user", replay=stores[i % len(stores)]), range(4)
+            )
+        )
+    assert all(r == expected for r in results)
+    ids = [r[0] for r in stores[0].connection.execute("SELECT id FROM records")]
+    assert len(ids) == len(set(ids)) == 4
+    reader = SQLiteReplayReader(stores[0].root)
+    assert all(reader.replay(i)["returned"] == [a["id"] for a in expected] for i in ids)
+    for store in stores:
+        store.close()
+
+
+def test_sqlite_full_disk_rejects_capture_and_preserves_old(
+    online_env, monkeypatch, tmp_path
+):
+    s, _ = fixture_service(online_env, monkeypatch)
+    store = SQLiteReplayStore(tmp_path / "wal")
+    s.recommend("user", replay=store)
+    old = store.last_request
+    pages = store.connection.execute("PRAGMA page_count").fetchone()[0]
+    store.connection.execute(f"PRAGMA max_page_count={pages}")
+    with db() as c:
+        c.execute(
+            "UPDATE users SET interests=? WHERE id=?",
+            (json.dumps(["x" * 100000]), "user"),
+        )
+    with pytest.raises(sqlite3.OperationalError, match="full"):
+        s.recommend("user", replay=store)
+    assert store.last_request == old
+    assert store.connection.execute("SELECT count(*) FROM records").fetchone()[0] == 1
+    assert SQLiteReplayReader(store.root).replay(old)["source_verified"]
+    assert s.recommend("user")  # ordinary fallback has no journal dependency
+    store.connection.execute("PRAGMA max_page_count=10000")
+    s.recommend("user", replay=store)
+    assert store.last_request != old
+    store.close()
+
+
+@pytest.mark.parametrize("committed", [False, True])
+def test_process_killed_before_or_after_commit(
+    online_env, monkeypatch, tmp_path, committed
+):
+    s, _ = fixture_service(online_env, monkeypatch)
+    store = SQLiteReplayStore(tmp_path / "wal")
+    s.recommend("user", replay=store)
+    old = store.last_request
+    frame = SQLiteReplayReader(store.root).envelope(old)
+    new = uuid.uuid4().hex
+    frame["record"]["request_id"] = new
+    frame["sha256"] = digest(canonical(frame["record"]))
+    payload = tmp_path / "payload.json"
+    payload.write_bytes(canonical(frame))
+    store.close()
+    code = """
+import sys
+from pathlib import Path
+from signalfeed.catalog_replay import SQLiteReplayStore
+s=SQLiteReplayStore(sys.argv[1])
+data=Path(sys.argv[2]).read_bytes()
+if sys.argv[4]=='yes':
+ s._publish(sys.argv[3],data)
+else:
+ s.connection.execute('BEGIN IMMEDIATE')
+ s.connection.execute('INSERT INTO records VALUES(?,?)',(sys.argv[3],data))
+print('ready',flush=True)
+sys.stdin.readline()
+"""
+    child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            code,
+            str(store.root),
+            str(payload),
+            new,
+            "yes" if committed else "no",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(child.stdout, selectors.EVENT_READ)
+            assert selector.select(timeout=15), "Child did not reach crash boundary"
+            assert child.stdout.readline() == b"ready\n"
+        child.kill()
+        child.wait(timeout=15)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=15)
+        for pipe in (child.stdin, child.stdout, child.stderr):
+            pipe.close()
+    reader = SQLiteReplayReader(store.root)
+    assert reader.replay(old)["source_verified"]
+    if committed:
+        assert reader.replay(new)["source_verified"]
+    else:
+        with pytest.raises(FileNotFoundError):
+            reader.replay(new)
+    reopened = SQLiteReplayStore(store.root)
+    assert reopened.connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    reopened.close()
+
+
+def test_sqlite_corruption_and_duplicate_id_rejected(online_env, monkeypatch, tmp_path):
+    s, _ = fixture_service(online_env, monkeypatch)
+    store = SQLiteReplayStore(tmp_path / "wal")
+    s.recommend("user", replay=store)
+    request = store.last_request
+    frame = SQLiteReplayReader(store.root).envelope(request)
+    with pytest.raises(sqlite3.IntegrityError):
+        store._publish(request, canonical(frame))
+    frame["record"]["limit"] = 2
+    with store.connection:
+        store.connection.execute(
+            "UPDATE records SET envelope=? WHERE id=?", (canonical(frame), request)
+        )
+    with pytest.raises(ValueError, match="checksum"):
+        SQLiteReplayReader(store.root).replay(request)
+    store.close()
+
+
+def test_file_sync_failure_is_not_acknowledged(online_env, monkeypatch, tmp_path):
+    s, _ = fixture_service(online_env, monkeypatch)
+    store = ReplayStore(tmp_path / "files")
+    s.recommend("user", replay=store)
+    old = store.last_request
+
+    def fail(fd):
+        raise OSError(errno.EIO, "injected sync failure")
+
+    monkeypatch.setattr(os, "fsync", fail)
+    with pytest.raises(OSError, match="sync failure"):
+        s.recommend("user", replay=store)
+    assert store.last_request == old
+    assert len(list((store.root / "requests").iterdir())) == 1
+    assert ReplayReader(store.root).replay(old)["source_verified"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        dict(published=float("nan")),
+        dict(updated=float("inf")),
+        dict(deleted=1),
+        dict(score=-1),
+    ],
+)
+def test_batched_catalog_validation_rejects_same_invalid_values(change):
+    rows = [dict(id="a", title="title", published=1, updated=1, deleted=0, score=1)]
+    rows[0].update(change)
+    with pytest.raises(ValueError, match="metadata"):
+        catalog_rows(rows)
