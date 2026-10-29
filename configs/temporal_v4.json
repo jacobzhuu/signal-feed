@@ -1,0 +1,22 @@
+{
+  "version": "temporal-readiness-v4",
+  "baseline_commit": "80cb25f",
+  "timezone": "UTC",
+  "user_split_salt": "signalfeed-temporal-v4/user/",
+  "label_window_seconds": 86400,
+  "snapshot_feature_version": "online-text-v2",
+  "baseline_strategy": "content-v1",
+  "phases": {
+    "select": {"start": "2026-10-30T00:00:00Z", "end": "2026-11-06T00:00:00Z", "buckets": [0, 1, 2]},
+    "guard": {"start": "2026-11-07T00:00:00Z", "end": "2026-11-14T00:00:00Z", "buckets": [3, 4, 5]},
+    "test": {"start": "2026-11-15T00:00:00Z", "end": "2026-11-22T00:00:00Z", "buckets": [6, 7, 8, 9]}
+  },
+  "close_at": "2026-11-23T00:10:00Z",
+  "minimum_pilot": {"users_per_band_per_phase": 200, "dates_per_band_per_phase": 3, "clicked_users_per_band_per_phase": 20},
+  "candidate_budget": 100,
+  "primary_bands": ["1-5", "10"],
+  "algorithm_registered": false,
+  "efficacy_authorized": false,
+  "automatic_training": false,
+  "automatic_promotion": false
+}
