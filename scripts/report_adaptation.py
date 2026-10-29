@@ -39,7 +39,8 @@ def unique_cf_scores(cf, history, items):
     Expanded-catalog items have zero collaborative support. This does not change
     recorded predictions or the primary retrieval endpoint.
     """
-    h = sorted({i for i in history if i < cf.shape[0]})
+    h = list(dict.fromkeys(reversed(history)))[::-1][-20:]
+    h = [i for i in h if i < cf.shape[0]]
     ids = np.asarray(items)
     valid = ids < cf.shape[1]
     scores = np.zeros(len(ids))
