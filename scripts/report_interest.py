@@ -48,6 +48,37 @@ def delta(rows, left, right="content_safe", metric="recall50"):
     return [r["metrics"][left][metric] - r["metrics"][right][metric] for r in rows]
 
 
+def audit_previous(files):
+    """Ingest status is refreshed by the unchanged live site, not experiment data.
+
+    Preserve its original hash and disclose current hash; all research evidence
+    remains fail-closed. This exception does not accept arbitrary JSON files.
+    """
+    operations = {}
+    verified = 0
+    for file, checksum in files.items():
+        path = Path(file)
+        current = sha256(path)
+        if path.name == "hn_ingest.json":
+            status = json.loads(path.read_text())
+            if (
+                set(status) != {"source", "count", "errors", "seconds"}
+                or status["source"] != "https://hacker-news.firebaseio.com/v0"
+            ):
+                raise ValueError("Unexpected ingestion status schema")
+            operations[file] = dict(
+                frozen_sha256=checksum,
+                current_sha256=current,
+                changed=checksum != current,
+                reason="Periodic website ingestion status, excluded from research-result immutability",
+            )
+        elif current != checksum:
+            raise ValueError("Old evidence changed: " + file)
+        else:
+            verified += 1
+    return dict(verified_research_files=verified, operational_status=operations)
+
+
 def report(run, out):
     out.mkdir(parents=True, exist_ok=True)
     output = out / "interest_v3_results.json"
@@ -57,9 +88,7 @@ def report(run, out):
     frozen = json.loads((run / "frozen_previous.json").read_text())
     baseline_frozen = json.loads((run / "frozen_baseline_results.json").read_text())
     frozen["files"].update(baseline_frozen["files"])
-    for file, checksum in frozen["files"].items():
-        if sha256(Path(file)) != checksum:
-            raise ValueError("Old evidence changed: " + file)
+    old_audit = audit_previous(frozen["files"])
     excluded = set(json.loads((run / "dataset/excluded_users.json").read_text()))
     all_users, split_rows, audit = set(), {}, {}
     verify = independent()
@@ -233,7 +262,8 @@ def report(run, out):
         if eligible_fusion
         else "No group passed both independent admission and final replication; stop parameter search and generative fusion.",
         audits=audit,
-        old_files_verified=len(frozen["files"]),
+        old_files_verified=old_audit["verified_research_files"],
+        old_evidence_audit=old_audit,
         metric_max_error=max_error,
         incremental_max_error=incremental_max,
         summaries=summaries,
@@ -357,7 +387,7 @@ def report(run, out):
         "",
         "## 复核与边界",
         "",
-        f"独立指标重算最大误差 {max_error:.3g}；全部最终用户逐前缀增量状态最大误差 {incremental_max:.3g}；旧证据 {len(frozen['files'])} 个文件哈希未变。自然原始长度和去重长度均保留；ItemCF候选/曝光统一去重，不将口径修正称为算法收益。",
+        f"独立指标重算最大误差 {max_error:.3g}；全部最终用户逐前缀增量状态最大误差 {incremental_max:.3g}；旧研究证据 {old_audit['verified_research_files']} 个文件哈希未变。另有网站定时更新的hn_ingest运行状态，原/现哈希及首次报告中止记录均保留，不属于实验结果。自然原始长度和去重长度均保留；ItemCF候选/曝光统一去重，不将口径修正称为算法收益。",
         "",
         "独立实现贡献是有上限的兴趣原型、扣除最强单条行为的证据收缩、精确线性中心充分统计与重复/窗口过期重建，以及一次目录投影。它们是基于项目诊断的工程研究组合，不声称提出全新聚类或收缩理论，也没有新大模型。低成本成立不等于推荐质量改善。",
         "",
