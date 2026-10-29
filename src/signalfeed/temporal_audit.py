@@ -153,6 +153,9 @@ def snapshot_status(request, items, prior, protocol):
 
 
 def audit(database, as_of, protocol):
+    from .feedback_policy import load_feedback_policy
+
+    policy = load_feedback_policy()
     if not np.isfinite(as_of):
         raise ValueError("Invalid audit time")
     c = readonly(database)
@@ -190,12 +193,16 @@ def audit(database, as_of, protocol):
                 malformed_requests.add(rid)
         event_counts = Counter()
         per_request, history = defaultdict(list), defaultdict(list)
-        test_users = {e["user_id"] for e in events if e["is_test"]}
+        test_users = {
+            e["user_id"]
+            for e in events
+            if e["is_test"] or e["user_id"] in policy.user_ids
+        } | {r["user_id"] for r in requests.values() if r["user_id"] in policy.user_ids}
         seen_event_keys = set()
         delays = defaultdict(list)
         for e in events:
             event_counts["all_visible_events"] += 1
-            if e["is_test"]:
+            if e["is_test"] or e["user_id"] in policy.user_ids:
                 event_counts["test_events"] += 1
                 continue
             event_counts["non_test_" + e["kind"]] += 1
@@ -358,6 +365,7 @@ def audit(database, as_of, protocol):
             events=dict(event_counts),
             requests=dict(quality),
             source_test_users=len(test_users),
+            feedback_policy=policy.metadata(),
             mature_exposed_users=len(all_mature_users),
             mature_clicked_users=len(all_clicked_users),
             daily={f"{d}/{g}": dict(v) for (d, g), v in sorted(daily.items())},

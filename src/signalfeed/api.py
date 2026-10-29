@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from time import monotonic
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 from .store import db, initialize, connection, cleanup
 from .serving import ContentService
 from .snapshots import pack
+from .feedback_policy import load_feedback_policy
 
 service = ContentService()
 
@@ -23,45 +25,60 @@ async def periodic_sync():
 
     while True:
         await asyncio.sleep(900)
-        await asyncio.to_thread(cleanup, time.time())
+        if os.environ.get("SIGNALFEED_RETENTION_CLEANUP", "1") == "1":
+            await asyncio.to_thread(cleanup, time.time())
         try:
             await sync()
-            await asyncio.to_thread(service.refresh, True)
+            service.background_refresh.submit(lambda: service.refresh(True))
         except Exception:
             logging.exception("HN refresh failed; existing catalog retained")
 
 
 @asynccontextmanager
 async def lifespan(app):
+    load_feedback_policy()  # Reject broken isolation configuration before serving.
+    from .cold_serving import research_jobs
+    from .cold_worker import startup as cold_startup
+
+    for runner in (
+        service.background_profile,
+        service.background_refresh,
+        research_jobs,
+    ):
+        runner.open()
+    cold_startup()
     initialize()
     # Keep WAL open across short request transactions, avoiding a checkpoint
     # and WAL recreation on every last-connection close. Retain FULL durability.
     anchor = connection()
     anchor.execute("SELECT count(*) FROM articles").fetchone()
-    await asyncio.to_thread(cleanup, time.time())
+    if os.environ.get("SIGNALFEED_RETENTION_CLEANUP", "1") == "1":
+        await asyncio.to_thread(cleanup, time.time())
     task = asyncio.create_task(periodic_sync())
-    warm = (
-        asyncio.create_task(asyncio.to_thread(service.refresh))
-        if os.environ.get("SIGNALFEED_PREWARM") == "1"
-        else None
-    )
+    if os.environ.get("SIGNALFEED_PREWARM") == "1":
+        service.background_refresh.submit(service.refresh)
     yield
     task.cancel()
     try:
         await task
     except asyncio.CancelledError:
         pass
-    if warm is not None:
-        try:
-            await warm
-        except Exception:
-            logging.exception("Encoder warmup failed")
+    # Close admission before stopping the worker. A hash/IO operation that
+    # finishes late must never spawn a new child during shutdown.
+    runners = (service.background_profile, service.background_refresh, research_jobs)
+    for runner in runners:
+        runner.close(timeout=0)
+    from .cold_worker import shutdown as cold_shutdown
+
+    await asyncio.to_thread(cold_shutdown, final=True)
+    for runner in runners:
+        if not await asyncio.to_thread(runner.close, timeout=1):
+            logging.warning(
+                "Background task still running at shutdown; admission closed"
+            )
     from .experimental import shutdown
 
     await asyncio.to_thread(shutdown)
-    from .cold_worker import shutdown as cold_shutdown
-
-    await asyncio.to_thread(cold_shutdown)
     anchor.close()
 
 
@@ -70,6 +87,9 @@ app = FastAPI(title="SignalFeed", version="0.1.0", lifespan=lifespan)
 
 @app.middleware("http")
 async def session(request: Request, call_next):
+    request.state.started = monotonic()
+    if request.url.path in {"/api/health", "/api/ready"}:
+        return await call_next(request)
     uid = request.cookies.get("signalfeed_session")
     with db() as c:
         known = (
@@ -81,6 +101,7 @@ async def session(request: Request, call_next):
             uid = uuid.uuid4().hex
             c.execute("INSERT INTO users(id) VALUES(?)", (uid,))
     request.state.user = uid
+    request.state.dispatched = monotonic()
     # Same-origin writes, including local deployment. No cross-site cookie use.
     origin = request.headers.get("origin")
     if (
@@ -90,6 +111,23 @@ async def session(request: Request, call_next):
     ):
         return Response("Cross-origin write rejected", status_code=403)
     response = await call_next(request)
+    timings = getattr(request.state, "cold_timings", None)
+    if timings is not None:
+        timings["server_total"] = (monotonic() - request.state.started) * 1000
+        response.headers["Server-Timing"] = ", ".join(
+            f"{key};dur={value:.3f}" for key, value in timings.items()
+        )
+        logging.getLogger("uvicorn.error").info(
+            "ColdFuse timing %s",
+            json.dumps(
+                dict(
+                    request_id=getattr(request.state, "request_id", None),
+                    status=getattr(request.state, "experiment_status", None),
+                    http_status=response.status_code,
+                    timings=timings,
+                )
+            ),
+        )
     if not known:
         response.set_cookie(
             "signalfeed_session",
@@ -109,6 +147,7 @@ def health():
         count = c.execute("SELECT count(*) FROM articles WHERE deleted=0").fetchone()[0]
     ready = service.vectors is not None and bool(service.items)
     return {
+        "release": os.environ.get("SIGNALFEED_RELEASE", "unsealed"),
         "status": "ready" if ready else "warming",
         "ready": ready,
         "articles": count,
@@ -137,10 +176,18 @@ def listing(request, query="", limit=30, research=False, cold=False):
     if cold:
         from .cold_serving import recommend
 
-        rows = recommend(service, request.state.user, limit, snapshot)
+        request.state.cold_timings = {
+            "session_db": (request.state.dispatched - request.state.started) * 1000,
+            "queue": (monotonic() - request.state.dispatched) * 1000,
+        }
+        rows = recommend(
+            service, request.state.user, limit, snapshot, request.state.cold_timings
+        )
     else:
         rows = service.recommend(request.state.user, query, limit, snapshot=snapshot)
     rid = uuid.uuid4().hex
+    request.state.request_id = rid
+    request.state.experiment_status = snapshot.get("coldfuse", {}).get("status")
     strategy = "hybrid-search-v1" if query else "content-v1"
     model_version = snapshot.get("model_version", service.version)
     if not query:
@@ -168,6 +215,7 @@ def listing(request, query="", limit=30, research=False, cold=False):
             rows = [{**lookup[i], "reason": "实验推荐"} for i in ranked if i in lookup][
                 :limit
             ]
+    saved_at = monotonic()
     with db(durable=False) as c:
         c.execute(
             "INSERT INTO requests VALUES(?,?,?,?,?,?,?)",
@@ -186,6 +234,8 @@ def listing(request, query="", limit=30, research=False, cold=False):
                 "INSERT INTO request_snapshots VALUES(?,?)",
                 (rid, pack(snapshot)),
             )
+    if cold:
+        request.state.cold_timings["snapshot_db"] = (monotonic() - saved_at) * 1000
     return dict(
         request_id=rid,
         strategy=strategy,
@@ -220,6 +270,7 @@ class Event(BaseModel):
 @app.post("/api/events")
 def event(body: Event, request: Request):
     uid = request.state.user
+    policy = load_feedback_policy()
     now = time.time()
     with db() as c:
         row = c.execute(
@@ -231,7 +282,10 @@ def event(body: Event, request: Request):
         if body.position >= len(items) or items[body.position] != body.item_id:
             raise HTTPException(422, "Item/position does not match request")
         # Tests are isolated by explicit server configuration, not client claims.
-        is_test = int(os.environ.get("SIGNALFEED_TEST_EVENTS", "0") == "1")
+        is_test = int(
+            os.environ.get("SIGNALFEED_TEST_EVENTS", "0") == "1"
+            or uid in policy.user_ids
+        )
         cur = c.execute(
             "INSERT OR IGNORE INTO events VALUES(?,?,?,?,?,?,?,?)",
             (
@@ -322,6 +376,9 @@ def stats():
     from .online_schema import LABEL_WINDOW
 
     now = time.time()
+    policy = load_feedback_policy()
+    real_requests, request_args = policy.exclude_sql("r.user_id")
+    real_bookmarks, bookmark_args = policy.exclude_sql("user_id")
     with db() as c:
         groups = [
             dict(r)
@@ -332,18 +389,21 @@ def stats():
                 "WHERE r.created+?<=? AND e.created>=r.created AND e.created<r.created+? "
                 "AND e.is_test=0 AND e.kind IN ('impression','click') AND r.query='' "
                 "AND (r.strategy='content-v1' OR r.strategy LIKE 'online-%' OR r.strategy LIKE 'coldfuse-%') "
+                f"AND {real_requests} "
                 "GROUP BY r.id,e.item_id) "
                 "SELECT strategy,model_version,COUNT(*) impressions,SUM(clicked) clicked_impressions, "
                 "SUM(viewable) viewable_impressions,SUM(NOT viewable) click_inferred_exposures "
                 "FROM exposures GROUP BY strategy,model_version",
-                (LABEL_WINDOW, now, LABEL_WINDOW),
+                (LABEL_WINDOW, now, LABEL_WINDOW, *request_args),
             )
         ]
-        bookmarks = c.execute("SELECT count(*) FROM bookmarks").fetchone()[0]
+        bookmarks = c.execute(
+            f"SELECT count(*) FROM bookmarks WHERE {real_bookmarks}", bookmark_args
+        ).fetchone()[0]
     n = sum(g["impressions"] for g in groups)
     clicked = sum(g["clicked_impressions"] for g in groups)
     return {
-        "scope": "HN feed only; mature 24h window; viewable OR click-inferred exposure; test events excluded",
+        "scope": "HN feed only; mature 24h window; viewable OR click-inferred exposure; test events and configured test users excluded",
         "training_note": "Training additionally requires compatible immutable snapshots",
         "label_window_seconds": LABEL_WINDOW,
         "impressions": n,

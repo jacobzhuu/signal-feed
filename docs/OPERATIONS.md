@@ -1,5 +1,11 @@
 # 本机运行、测试与维护
 
+2026-10-30 已启用校园网 IPv4 访问，当前入口及启停参数见 [校园网部署](CAMPUS_DEPLOYMENT.md)。下文只监听本机的历史部署说明应结合该更新阅读。
+
+服务端测试身份排除配置、历史数据隔离边界及回滚方式见 [测试用户反馈隔离](TEST_USER_ISOLATION.md)。代码修复尚未部署，不能据此认为当前线上自测数据已经被排除。
+
+ColdFuse 首次访问与编码锁等待修复的阶段耗时、前后对照和部署边界见 [延迟排查报告](COLDFUSE_LATENCY.md)。该修复也尚未部署；测试前端输出在独立目录。
+
 ## 环境
 
 Python 3.11、Node 22、单张 CUDA GPU 用于训练；线上服务默认 CPU。首次安装使用 `bash scripts/install.sh`。本机环境已安装在 `/data1/zhuzy/signalfeed/venv`，`scripts/env.sh` 配置路径与缓存。不要向宿主 conda base 环境安装依赖。

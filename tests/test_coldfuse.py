@@ -222,6 +222,7 @@ def test_completed_worker_survives_idle_and_reuses_process(monkeypatch):
     import signalfeed.cold_worker as worker
 
     worker.shutdown()
+    worker.startup()
     context = multiprocessing.get_context("fork")
     monkeypatch.setattr(worker.multiprocessing, "get_context", lambda _: context)
     monkeypatch.setattr(worker, "MAX_RUNTIME", 0.3)
@@ -255,6 +256,7 @@ def test_cold_worker_hard_deadline(monkeypatch):
     import signalfeed.cold_worker as worker
 
     worker.shutdown()
+    worker.startup()
     monkeypatch.setattr(worker, "MAX_RUNTIME", 0.2)
     monkeypatch.setattr(worker, "model_identity", lambda: "test")
     monkeypatch.setattr(worker, "_worker", _stall)
@@ -301,7 +303,7 @@ def test_cold_api_feedback_snapshot_and_missing_model_fallback(online_env, monke
     monkeypatch.setattr(serving, "active_ranker", lambda: None)
     calls = []
 
-    def research(payload):
+    def research(payload, timeout=2):
         calls.append(payload)
         return None, "unavailable-fallback", None
 

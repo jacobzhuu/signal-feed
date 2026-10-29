@@ -15,6 +15,43 @@ from signalfeed.temporal_audit import audit, load_protocol, phase_for, readonly,
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_configured_test_identity_is_excluded_without_rewriting_events(
+    setup, tmp_path, monkeypatch
+):
+    file, protocol, start, ordinary = setup
+    tester = "a" * 32
+    for uid in (ordinary, tester):
+        request(file, uid, uid, start)
+        event(file, uid, uid, start + 1, test=0)
+    before = file.read_bytes()
+    config = tmp_path / "test-users.json"
+    config.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "users": [
+                    {"id": tester, "reason": "synthetic audit test"},
+                    {"id": "d" * 32, "reason": "not present in this database"},
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv("SIGNALFEED_TEST_USERS_FILE", str(config))
+    result, rows = audit(file, start + 86401, protocol)
+    assert result["events"]["test_events"] == 1
+    assert result["events"]["non_test_click"] == 1
+    assert result["requests"]["test_contaminated_user_requests"] == 1
+    assert result["mature_exposed_users"] == 1
+    assert result["source_test_users"] == 1
+    assert result["feedback_policy"]["test_user_count"] == 2
+    assert all(
+        r["user_hash"]
+        != hashlib.sha256(("temporal-v4/private/" + tester).encode()).hexdigest()
+        for r in rows
+    )
+    assert file.read_bytes() == before
+
+
 def observer():
     spec = importlib.util.spec_from_file_location(
         "audit_feedback", ROOT / "scripts/audit_feedback.py"

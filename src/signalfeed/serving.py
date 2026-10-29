@@ -11,6 +11,8 @@ import time
 import numpy as np
 from .settings import path, ENCODER_MODEL, ENCODER_REVISION
 from .store import db
+from .feedback_policy import load_feedback_policy
+from .background import BoundedRunner
 
 
 class ContentService:
@@ -30,8 +32,15 @@ class ContentService:
         self.online_version = None
         self.embedding_cache = {}
         self.query_cache = {}
+        self.background_refresh = BoundedRunner(1)
+        self.background_profile = BoundedRunner(1)
+        self.profile_job_lock = threading.Lock()
+        self.profile_job = None
 
     def encode_query(self, text):
+        cached = self.query_cache.get(text)
+        if cached is not None:
+            return cached
         with self.encode_lock:
             if text not in self.query_cache:
                 if len(self.query_cache) >= 128:
@@ -40,6 +49,35 @@ class ContentService:
                     [text], normalize_embeddings=True
                 )[0]
             return self.query_cache[text]
+
+    def encode_query_bounded(self, text, timeout=0.15):
+        cached = self.query_cache.get(text)
+        if cached is not None:
+            return cached
+        with self.profile_job_lock:
+            if self.profile_job is None or self.profile_job[1].done.is_set():
+                job = self.background_profile.submit(lambda: self.encode_query(text))
+                if job is None:
+                    return None
+                self.profile_job = text, job
+            key, job = self.profile_job
+        if key != text:
+            return None
+        try:
+            completed, value = job.wait(timeout)
+            return value if completed else None
+        except Exception:
+            logging.exception("Interest encoding failed; temporary base recommendation")
+            return None
+
+    def refresh_in_background(self):
+        """Serve a complete catalog while a bounded background refresh runs."""
+        with self.lock:
+            ready = self.vectors is not None
+            due = not ready or time.time() - self.refresh_at >= 60
+        if due:
+            self.background_refresh.submit(self.refresh)
+        return ready
 
     def active_ranker(self):
         with self.lock:
@@ -183,6 +221,7 @@ class ContentService:
             self.refresh_lock.release()
 
     def recommend(self, user, query="", limit=30, *, snapshot=None, replay=None):
+        policy = load_feedback_policy()
         # Opt-in prototype only; the website never supplies this argument.
         if replay is not None and (
             os.environ.get("SIGNALFEED_TEST_EVENTS") != "1"
@@ -230,6 +269,7 @@ class ContentService:
             }
             collaborative = {}
             if hist and not query:
+                real_peers, peer_args = policy.exclude_sql("e1.user_id")
                 history_ids = [r[0] for r in hist]
                 placeholders = ",".join("?" for _ in history_ids)
                 collaborative = dict(
@@ -238,9 +278,10 @@ class ContentService:
                         f"JOIN events e2 ON e1.user_id=e2.user_id "
                         f"WHERE e1.item_id IN ({placeholders}) AND e1.user_id<>? "
                         "AND e1.kind IN ('click','bookmark') AND e2.kind IN ('click','bookmark') "
-                        "AND e1.is_test=0 AND e2.is_test=0 AND e1.created<=? AND e2.created<=? GROUP BY e2.item_id "
+                        "AND e1.is_test=0 AND e2.is_test=0 AND e1.created<=? AND e2.created<=? "
+                        f"AND {real_peers} GROUP BY e2.item_id "
                         "ORDER BY COUNT(DISTINCT e2.user_id) DESC LIMIT 100",
-                        (*history_ids, user, created, created),
+                        (*history_ids, user, created, created, *peer_args),
                     ).fetchall()
                 )
             lexical = []

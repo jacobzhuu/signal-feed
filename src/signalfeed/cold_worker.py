@@ -14,6 +14,7 @@ _lock = threading.Lock()
 _process = _connection = _pending = _timer = None
 _version = None
 _cache = {}
+_closing = False
 
 
 def model_identity():
@@ -141,14 +142,26 @@ def _exchange(connection, payload, job):
             _collect()
 
 
-def shutdown():
+def startup():
+    global _closing
     with _lock:
+        _closing = False
+
+
+def shutdown(final=False):
+    global _closing
+    with _lock:
+        if final:
+            _closing = True
         _stop()
         _cache.clear()
 
 
 def recommend(payload, timeout=2):
     global _process, _connection, _pending, _timer, _version
+    with _lock:
+        if _closing:
+            return None, "unavailable-fallback", None
     try:
         version = model_identity()
         key = cache_key(payload, version)
@@ -157,6 +170,8 @@ def recommend(payload, timeout=2):
     # Hashing and inference waits are outside this short critical section.
     # A cached result must not be rejected just because another key is loading.
     with _lock:
+        if _closing:
+            return None, "unavailable-fallback", None
         try:
             if _version is not None and _version != version:
                 _stop()

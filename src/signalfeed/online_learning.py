@@ -20,14 +20,16 @@ from .online_schema import (
 )
 from .snapshots import unpack
 from .publication import publication_lock, atomic_json
+from .feedback_policy import load_feedback_policy
 
 
-def feedback_records(now, max_exposures=50000, *, cold=False):
+def feedback_records(now, max_exposures=50000, *, cold=False, policy=None):
     """Stream only requests with feedback; retain bounded complete request groups.
 
     A valid click proves exposure even if the one-second view event never arrives.
     Viewable and click-inferred exposure counts remain distinguishable.
     """
+    policy = load_feedback_policy() if policy is None else policy
     batches, size = deque(), 0
     excluded = defaultdict(int)
     with db() as c:
@@ -39,6 +41,9 @@ def feedback_records(now, max_exposures=50000, *, cold=False):
             (LABEL_WINDOW, now),
         )
         for request in requests:
+            if request["user_id"] in policy.user_ids:
+                excluded["test_user_requests"] += 1
+                continue
             rid, start = request["id"], request["created"]
             end = start + LABEL_WINDOW
             events = [
@@ -247,6 +252,7 @@ def retrain(min_exposures=1000, min_clicks=50, *, cold=False):
 def _retrain(min_exposures=1000, min_clicks=50, *, cold=False):
     from .serving import ContentService
 
+    policy = load_feedback_policy()
     initialize()
     from . import coldfuse
 
@@ -263,13 +269,14 @@ def _retrain(min_exposures=1000, min_clicks=50, *, cold=False):
         return result
 
     now = time.time()
-    records, excluded = feedback_records(now, cold=cold)
+    records, excluded = feedback_records(now, cold=cold, policy=policy)
     summary = dict(
         mature_exposures=len(records),
         positive_exposures=sum(r[2] for r in records),
         required_exposures=min_exposures,
         required_clicks=min_clicks,
         excluded_exposures=excluded,
+        feedback_policy=policy.metadata(),
         evaluated_at=now,
     )
     if len(records) < min_exposures or summary["positive_exposures"] < min_clicks:

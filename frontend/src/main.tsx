@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { eventId } from "./event-id";
 import "./style.css";
 type Article = {
   id: string;
@@ -36,7 +37,7 @@ function Card({
   const [saving, setSaving] = useState(false);
   const emit = async (kind: string) => {
     const body = JSON.stringify({
-      event_id: crypto.randomUUID(),
+      event_id: eventId(),
       request_id: request,
       item_id: item.id,
       kind,
@@ -311,7 +312,9 @@ function App() {
             </div>
             {tab === "cold" && <div className="panel experiment-note" role="status">
               <p>从兴趣和最近阅读开始，逐步调整推荐。这是实验功能，尚未验证实际效果。</p>
-              {listing.experiment?.status.includes("fallback") && <p>加速暂时不可用，已按兴趣与热度推荐。</p>}
+              {listing.experiment?.status === "profile-warming-fallback"
+                ? <p>兴趣画像正在准备，先展示基础推荐。稍后可更新。</p>
+                : listing.experiment?.status.includes("fallback") && <p>加速暂时不可用，已按兴趣与热度推荐。</p>}
               <button disabled={busy} onClick={() => load("/api/feed?cold=true")}>根据最新阅读更新</button>
             </div>}
             {error && (
@@ -320,9 +323,8 @@ function App() {
                 <button onClick={() => load(listingUrl.current)}>重试</button>
               </div>
             )}
-            {busy ? (
-              <div className="loading">正在寻找新的信号…</div>
-            ) : listing.items.length ? (
+            {busy && <div className="loading">{listing.items.length ? "正在更新，以下保留上一列表…" : "正在寻找新的信号…"}</div>}
+            {listing.items.length ? (
               listing.items.map((item) => (
                 <Card
                   key={listing.request_id + item.id}
@@ -342,7 +344,7 @@ function App() {
                   }
                 />
               ))
-            ) : (
+            ) : !busy && (
               <div className="empty">
                 {tab === "bookmarks"
                   ? "还没有收藏，留下你想再读的内容。"
