@@ -4,6 +4,7 @@ import json
 import hashlib
 import io
 import logging
+import os
 import re
 import threading
 import time
@@ -181,11 +182,23 @@ class ContentService:
         finally:
             self.refresh_lock.release()
 
-    def recommend(self, user, query="", limit=30, *, snapshot=None):
+    def recommend(self, user, query="", limit=30, *, snapshot=None, replay=None):
+        # Opt-in prototype only; the website never supplies this argument.
+        if replay is not None and (
+            os.environ.get("SIGNALFEED_TEST_EVENTS") != "1"
+            or query
+            or not 1 <= limit <= 100
+        ):
+            raise ValueError(
+                "Replay requires isolated content requests with budget <=100"
+            )
         self.refresh()
         with self.lock:
             items, vectors, index = self.items, self.vectors, self.index
+            catalog_refreshed_at = self.refresh_at
         if not items:
+            if replay is not None:
+                raise ValueError("Cannot record an empty catalog")
             return []
         created = time.time()
         with db() as c:
@@ -198,6 +211,17 @@ class ContentService:
                 "SELECT item_id,MAX(created) stamp FROM events WHERE user_id=? AND created<=? AND kind IN ('click','bookmark') GROUP BY item_id ORDER BY stamp DESC,item_id LIMIT 20",
                 (user, created),
             ).fetchall()
+            if replay is not None:
+                full_history = c.execute(
+                    "SELECT item_id,MAX(created) stamp FROM events WHERE user_id=? AND created<=? "
+                    "AND kind IN ('click','bookmark') GROUP BY item_id ORDER BY stamp DESC,item_id",
+                    (user, created),
+                ).fetchall()
+                counts = c.execute(
+                    "SELECT COUNT(*),COALESCE(SUM(is_test=0),0),COALESCE(SUM(is_test<>0),0) "
+                    "FROM events WHERE user_id=? AND created<=? AND kind IN ('click','bookmark')",
+                    (user, created),
+                ).fetchone()
             bookmarks = {
                 r[0]
                 for r in c.execute(
@@ -267,6 +291,8 @@ class ContentService:
             scores[hi] -= 0.4
             with self.lock:
                 active = self.active_ranker()
+                if active is not None and replay is not None:
+                    raise ValueError("Online DNN replay is outside this prototype")
                 version = (
                     "online-" + self.online_version
                     if active is not None
@@ -287,6 +313,32 @@ class ContentService:
                 order = np.argsort(-scores, kind="stable")[:limit]
                 self.version = "content-v1"
             reason = "根据阅读兴趣推荐" if hi or interests else "近期热门技术资讯"
+            if replay is not None:
+                replay.capture(
+                    items=items,
+                    vectors=vectors,
+                    scores=scores,
+                    returned=[items[i]["id"] for i in order],
+                    context=dict(
+                        created=created,
+                        catalog_refreshed_at=catalog_refreshed_at,
+                        model_version=version,
+                        limit=limit,
+                        user_key=hashlib.sha256(
+                            ("replay-v1/" + user).encode()
+                        ).hexdigest(),
+                        history_newest_first=[items[i]["id"] for i in hi],
+                        observed_unique_history_newest_first=[
+                            dict(item_id=r[0], time=r[1]) for r in full_history
+                        ],
+                        positive_actions=counts[0],
+                        real_positive_actions=counts[1],
+                        test_positive_actions=counts[2],
+                        explicit=explicit,
+                        interests=interests,
+                        collaborative=collaborative,
+                    ),
+                )
             if snapshot is not None:
                 from .online_schema import FEATURE_VERSION, online_matrix
 
