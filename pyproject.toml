@@ -16,6 +16,9 @@ dependencies = [
   "datasets==4.2.0", "fire==0.7.1", "bitsandbytes==0.48.1"
 ]
 
+[project.optional-dependencies]
+research = ["matplotlib==3.9.4"]
+
 [project.scripts]
 signalfeed = "signalfeed.cli:app"
 
