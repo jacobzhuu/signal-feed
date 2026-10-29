@@ -50,9 +50,24 @@ class State:
     shrinkage: float
 
 
+def canonical_history(history):
+    """Keep the latest occurrence, in time order, capped at 20 unique items."""
+    return list(dict.fromkeys(reversed(history)))[::-1][-20:]
+
+
+def itemcf_scores(cf, history, items=None):
+    """Candidate and exposure scores use the same independent evidence."""
+    h = canonical_history(history)
+    width = cf.shape[1] if items is None else len(items)
+    if not h:
+        return np.zeros(width, dtype="float32")
+    rows = cf[h] if items is None else cf[h][:, items]
+    return np.asarray(rows.sum(0)).ravel()
+
+
 def state(vectors, history, explicit=None, tau=3, shrink=True):
     # Repeated views must not manufacture independent evidence.
-    h = list(dict.fromkeys(reversed(history)))[::-1][-20:]
+    h = canonical_history(history)
     if any(i < 0 or i >= len(vectors) for i in h):
         raise ValueError("History outside the catalog")
     prior = unit(np.zeros(vectors.shape[1]) if explicit is None else explicit)
@@ -177,7 +192,7 @@ class ColdFuse:
         sim = self.x @ s.profile
         if cf_scores is None:
             cf_scores = (
-                np.asarray(self.cf[s.history].sum(0)).ravel()
+                itemcf_scores(self.cf, s.history)
                 if s.history and self.cf is not None
                 else np.zeros(len(self.x))
             )

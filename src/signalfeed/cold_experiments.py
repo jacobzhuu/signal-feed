@@ -19,6 +19,7 @@ from .retrieval import adaptive, fuse, load_gate
 from .evaluation import ranking_metrics, recall_metrics, average
 from .provenance import run_identity, sha256, code_identity
 from .settings import path
+from .coldfuse import itemcf_scores
 
 SCENARIOS = ("no_explicit", "proxy_explicit")
 ABLATIONS = ("no_prior", "no_gen", "fixed_gates", "no_shrinkage", "no_dnn")
@@ -121,11 +122,7 @@ def baselines(f, core, ctx, h, impression_ids, old_ranker, gate):
         rank[name] = [score.get(i, 0) for i in impression_ids]
     rank["popularity"] = f.pop[impression_ids].tolist()
     rank["content"] = (f.x[impression_ids] @ s.profile).tolist()
-    rank["itemcf"] = (
-        np.asarray(f.cf[h][:, impression_ids].sum(0)).ravel().tolist()
-        if h
-        else [0.0] * len(impression_ids)
-    )
+    rank["itemcf"] = itemcf_scores(f.cf, s.history, impression_ids).tolist()
     rank["repaired_dnn"] = [float(scores[i]) for i in impression_ids]
     return variants, rank
 

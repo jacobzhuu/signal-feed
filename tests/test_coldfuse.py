@@ -389,3 +389,17 @@ def test_separate_cold_feedback_training_contract(online_env, monkeypatch):
     assert not (online_env("online-models") / "active.json").exists()
     assert serving.active_ranker() is not None
     assert serving.online.online_version == result["version"]
+
+
+def test_itemcf_candidate_exposure_duplicate_history_contract():
+    from scipy.sparse import csr_matrix
+    from signalfeed.coldfuse import canonical_history, itemcf_scores
+
+    cf = csr_matrix(np.arange(25 * 25, dtype='float32').reshape(25, 25))
+    history = list(range(24)) + [3, 3, 21]
+    expected = canonical_history(history)
+    assert len(expected) == 20 and expected[-2:] == [3, 21]
+    dense = itemcf_scores(cf, history)
+    assert np.array_equal(dense, np.asarray(cf[expected].sum(0)).ravel())
+    assert np.array_equal(itemcf_scores(cf, history, [0, 4, 24]), dense[[0, 4, 24]])
+    assert itemcf_scores(cf, [], [1, 2]).tolist() == [0, 0]

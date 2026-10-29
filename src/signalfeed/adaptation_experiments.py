@@ -18,7 +18,7 @@ from .adaptation import (
     fuse_interest,
     cohort_key,
 )
-from .coldfuse import ColdFuse, Config, BUDGETS, weights
+from .coldfuse import ColdFuse, Config, BUDGETS, weights, itemcf_scores
 from .cold_protocol import simulate, prototypes
 from .cold_training import load
 from .cold_experiments import context, compose, eligibility
@@ -189,11 +189,9 @@ def collect(root, split, seed):
                     scoring["content"] if channels["content"] else scoring["popularity"]
                 )
                 scoring["coldfuse"] = rank
-                scoring["itemcf"] = (
-                    np.asarray(f.cf[h][:, impression].sum(0)).ravel().tolist()
-                    if h
-                    else [0.0] * len(impression)
-                )
+                scoring["itemcf"] = itemcf_scores(
+                    f.cf, ctx["state"].history, impression
+                ).tolist()
                 costs = dict(
                     coldfuse=cold_seconds, signal=signal_seconds, **ctx["costs"]
                 )
