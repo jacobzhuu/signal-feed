@@ -130,6 +130,7 @@ def benchmark(root):
         notes=[
             "First100 hash-selected users per cohort, all scenarios/budgets; fixed rotating method order",
             "No HTTP, database or text encoder request cost; catalog size recorded explicitly",
+            "Resident models and prebuilt SID index; index construction included only in initialization time",
             "Shared host, CPU only; peak RSS includes all loaded baselines, not isolated adapter memory",
             "Generation/DNN bypassed entirely for rejected guard groups; no future feedback used",
         ],

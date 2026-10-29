@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import rankdata
 from signalfeed.adaptation_experiments import paired_test, holm, algorithm_identity
+from signalfeed.adaptation import GRID
 from signalfeed.provenance import sha256
 
 METHODS = (
@@ -87,6 +88,90 @@ def confidence(values, repeats=2000):
     return np.quantile(boot, [0.025, 0.975]).tolist() if len(x) else [None, None]
 
 
+def decision_audit(root, selection, guard):
+    """Reconstruct all selection means and guard decisions from recorded trials."""
+    trials, groups = [], defaultdict(list)
+    sources, bindings = {}, {}
+    file = root / "reports/select-42/predictions.jsonl"
+    assert sha256(file) == selection["predictions_sha256"]
+    with file.open() as stream:
+        for line in stream:
+            r = json.loads(line)
+            assert len(r["trials"]) == len(GRID)
+            groups[r["group"]].append(r["trials"])
+            if r["cohort"] == "main" and r["k"] != 10:
+                trials.append(r["trials"])
+    means = np.mean(trials, axis=0)
+    for i, trial in enumerate(selection["trials"]):
+        assert abs(trial["recall50"] - means[i]) < 1e-12
+    winner = min(
+        range(len(GRID)),
+        key=lambda i: (-means[i], GRID[i].side, GRID[i].multi, GRID[i].recent),
+    )
+    from dataclasses import asdict
+
+    assert selection["config"] == asdict(GRID[winner])
+    users = defaultdict(lambda: defaultdict(list))
+    for split, seeds in (
+        ("select", (42,)),
+        ("guard", (42, 43, 44)),
+        ("test", (42, 43, 44)),
+    ):
+        for seed in seeds:
+            file = root / f"reports/{split}-{seed}/predictions.jsonl"
+            meta = json.loads(file.with_name("metrics.json").read_text())
+            assert meta["algorithm"] == algorithm_identity()
+            assert meta["dataset_sha256"] == sha256(root / "dataset/manifest.json")
+            assert meta["predictions_sha256"] == sha256(file)
+            sources[f"{split}-{seed}"] = meta["predictions_sha256"]
+            binding = dict(models=meta["models"], data=meta["data"])
+            if seed in bindings:
+                assert binding == bindings[seed]
+            bindings[seed] = binding
+            if split != "guard":
+                continue
+            assert guard["sources"][str(seed)] == meta["predictions_sha256"]
+            assert meta["selection_sha256"] == sha256(root / "selection.json")
+            with file.open() as stream:
+                for line in stream:
+                    r = json.loads(line)
+                    p = set(r["targets"])
+                    # Match the original separate-ratio subtraction exactly.
+                    delta = (
+                        (
+                            len(set(r["variants"]["adaptation"][:50]) & p) / len(p)
+                            - len(set(r["variants"]["content_safe"][:50]) & p) / len(p)
+                        )
+                        if p
+                        else 0.0
+                    )
+                    users[r["guard_group"]][r["user"]].append(delta)
+    tests = {
+        key: paired_test([np.mean(v) for v in users[key].values()])
+        for key in guard["groups"]
+    }
+    holm(tests)
+    for key, test in tests.items():
+        expected = guard["groups"][key]
+        assert test["n"] == expected["n"]
+        assert np.allclose(test["ci"], expected["ci"], atol=1e-12, rtol=0)
+        assert abs(test["mean"] - expected["mean"]) < 1e-12
+        assert test["p"] == expected["p"] and test["p_holm"] == expected["p_holm"]
+        assert (
+            bool(test["n"] >= 100 and test["ci"][0] > 0 and test["p_holm"] <= 0.05)
+            == expected["accepted"]
+        )
+    return dict(
+        selection_recomputed=True,
+        guard_recomputed=True,
+        models_and_bound_data_unchanged_across_phases=True,
+        sources=sources,
+        selection_all_groups={
+            g: np.mean(v, axis=0).tolist() for g, v in groups.items()
+        },
+    )
+
+
 def report(root, output):
     output.mkdir(exist_ok=True, parents=True)
     dataset = root / "dataset"
@@ -99,6 +184,7 @@ def report(root, output):
     guard = json.loads((root / "guard.json").read_text())
     assert selection["algorithm"] == guard["algorithm"] == algorithm_identity()
     assert guard["selection_sha256"] == sha256(root / "selection.json")
+    decisions = decision_audit(root, selection, guard)
     users, sample = {}, {}
     excluded = set(json.loads((dataset / "excluded_large_users.json").read_text()))
     for split in ("select", "guard", "test"):
@@ -261,9 +347,10 @@ def report(root, output):
                         (channels[a] - others) & p
                     ) / max(1, len(p))
                     diag[f"size/{a}"] = len(channels[a])
-                for group in aliases:
+                for group in aliases + [g + "|" + s for s in slices]:
                     for name, value in diag.items():
                         diagnostic[group][name].append(value)
+                for group in aliases:
                     for name, value in r["costs"].items():
                         costs[group][name].append(value)
         expected_count = sum(10 if c == "main" else 1 for c, _, _ in sample)
@@ -335,6 +422,7 @@ def report(root, output):
         dataset=data,
         selection=selection,
         guard=guard,
+        decision_audit=decisions,
         maximum_recomputed_error=maximum_error,
         provenance=provenance,
         groups=summary,
@@ -358,7 +446,10 @@ def report(root, output):
         exploratory_comparisons=comparisons,
         exploratory_slices=slices,
         complementarity={
-            g: {k: float(np.mean(v)) for k, v in d.items()}
+            g: dict(
+                users=len(d["coherence"]) // 3,
+                **{k: float(np.mean(v)) for k, v in d.items()},
+            )
             for g, d in diagnostic.items()
         },
         shared_research_costs={
@@ -376,6 +467,7 @@ def report(root, output):
             "Three model seeds are averaged within user, not counted as independent users",
             "Primary nine tests Holm-corrected; per-budget and cohort intervals exploratory",
             "Union100 is an oracle coverage diagnostic with up to 300 candidates, not a fair-budget recommender",
+            "new_items means added to the frozen small catalog, not a verified publication-date cohort",
         ],
     )
     (output / "adaptation_results.json").write_text(json.dumps(result, indent=2))
