@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import numpy as np
 from scipy.stats import rankdata
+from scipy import sparse
 from signalfeed.adaptation_experiments import paired_test, holm, algorithm_identity
 from signalfeed.adaptation import GRID
 from signalfeed.provenance import sha256
@@ -30,6 +31,21 @@ METHODS = (
     "guarded",
 )
 MAIN = ("content_safe", "fixed_fusion", "coldfuse", "adaptation", "guarded")
+
+
+def unique_cf_scores(cf, history, items):
+    """Audit frozen ItemCF exposure scores against its deduplicated candidates.
+
+    Expanded-catalog items have zero collaborative support. This does not change
+    recorded predictions or the primary retrieval endpoint.
+    """
+    h = sorted({i for i in history if i < cf.shape[0]})
+    ids = np.asarray(items)
+    valid = ids < cf.shape[1]
+    scores = np.zeros(len(ids))
+    if h and valid.any():
+        scores[valid] = np.asarray(cf[h][:, ids[valid]].sum(0)).ravel()
+    return scores
 
 
 def independent_metrics(pred, targets, labels, scores):
@@ -185,6 +201,13 @@ def report(root, output):
     assert selection["algorithm"] == guard["algorithm"] == algorithm_identity()
     assert guard["selection_sha256"] == sha256(root / "selection.json")
     decisions = decision_audit(root, selection, guard)
+    cf_file = Path(data["baseline"]) / "mind/cf.npz"
+    select_meta = json.loads((root / "reports/select-42/metrics.json").read_text())
+    assert sha256(cf_file) == select_meta["data"]["files"]["cf.npz"]
+    cf = sparse.load_npz(cf_file)
+    cf_audit = defaultdict(lambda: defaultdict(list))
+    repeated_cf = set()
+    changed_cf_auc = set()
     cost = json.loads((root / "reports/inference_cost.json").read_text())
     assert cost["algorithm"] == algorithm_identity()
     assert cost["guard_sha256"] == sha256(root / "guard.json")
@@ -272,6 +295,25 @@ def report(root, output):
                 )
                 assert r["variants"]["guarded"] == r["variants"][expected]
                 p, h = set(r["targets"]), set(r["observed"])
+                repeated = len(h) != len(r["observed"])
+                if repeated:
+                    repeated_cf.add((g, r["user"]))
+                cf_scores = (
+                    unique_cf_scores(cf, r["observed"], r["items"])
+                    if repeated
+                    else r["scores"]["itemcf"]
+                )
+                corrected_cf = independent_metrics(
+                    r["variants"]["itemcf"], r["targets"], r["labels"], cf_scores
+                )
+                if corrected_cf["auc"] != r["metrics"]["itemcf"]["auc"]:
+                    changed_cf_auc.add((g, r["user"]))
+                for group in aliases:
+                    for metric in ("auc", "mrr", "ndcg5", "ndcg10"):
+                        before = r["metrics"]["itemcf"][metric]
+                        after = corrected_cf[metric]
+                        if before is not None:
+                            cf_audit[group, metric][r["user"]].append((before, after))
                 reachable = {i for i in p if first[i] < r["time"] and i not in h}
                 assert reachable == set(r["reachable"])
                 record_metrics = {}
@@ -494,6 +536,24 @@ def report(root, output):
         decision_audit=decisions,
         standalone_inference_cost=cost,
         standalone_prediction_parity=parity,
+        itemcf_exposure_score_audit=dict(
+            cf_sha256=sha256(cf_file),
+            repeated_history_instances=len(repeated_cf),
+            repeated_history_users=len({u for _, u in repeated_cf}),
+            changed_auc_instances=len(changed_cf_auc),
+            original_scores_preserved=True,
+            candidate_predictions_unchanged=True,
+            groups={
+                "/".join(key): dict(
+                    users=len(rows),
+                    raw=float(np.mean([np.mean(v, axis=0)[0] for v in rows.values()])),
+                    unique_history=float(
+                        np.mean([np.mean(v, axis=0)[1] for v in rows.values()])
+                    ),
+                )
+                for key, rows in sorted(cf_audit.items())
+            },
+        ),
         maximum_recomputed_error=maximum_error,
         provenance=provenance,
         groups=summary,
@@ -708,6 +768,8 @@ def markdown(result, output):
         "",
     ]
     lines += [
+        "",
+        "ItemCF曝光分数复核：冻结评测器按原始重复历史累加曝光分数，但候选策略已对历史去重。原始CSV/JSON仍保留原值；JSON的itemcf_exposure_score_audit另列与候选策略一致的去重AUC/MRR/NDCG。Recall及全部主要检验不变，不能将这项曝光口径修正称为算法提升。",
         "",
         "完整15个方法、所有曝光/召回指标、三种子数值、消融差值、预定义分群、候选互补和研究成本见 [JSON](adaptation_results.json) / [CSV](ADAPTATION_METRICS.csv)。曝光稀疏融合分数与密集DNN/内容分数的AUC支持不同，不作主要收益口径。",
         "",

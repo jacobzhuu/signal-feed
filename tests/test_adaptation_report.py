@@ -75,3 +75,13 @@ def test_independent_metric_ties_and_multiple_positives():
         report.independent_metrics([1, 1], [1], [1, 0], [1, 0])
     with pytest.raises(ValueError):
         report.independent_metrics([1], [1], [1, 0], [float("nan"), 0])
+
+
+def test_cf_exposure_audit_matches_unique_history_and_extended_catalog():
+    from scipy.sparse import csr_matrix
+
+    report = module()
+    cf = csr_matrix([[0.0, 1.0, 2.0], [1.0, 0.0, 3.0], [2.0, 3.0, 0.0]])
+    scores = report.unique_cf_scores(cf, [0, 0, 1, 5], [1, 2, 4])
+    assert scores.tolist() == [1.0, 5.0, 0.0]
+    assert report.unique_cf_scores(cf, [5], [1, 4]).tolist() == [0.0, 0.0]
