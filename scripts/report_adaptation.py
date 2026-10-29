@@ -467,6 +467,8 @@ def report(root, output):
             ("adaptation", "no_side"),
             ("adaptation", "no_gen"),
             ("adaptation", "fixed_side"),
+            ("fixed_side", "no_reliability"),
+            ("interest_only", "content_safe"),
         ):
             left, right = (
                 values[group, method]["recall50"],
