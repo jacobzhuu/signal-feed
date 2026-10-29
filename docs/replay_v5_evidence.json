@@ -1,0 +1,485 @@
+{
+  "status": "replay_correct_but_capture_latency_failed_keep_disabled",
+  "baseline_commit": "cc144ad",
+  "implementation_commit": "c1d6296fce6fcad8e9c9ec95cdb6e3026ec5226e",
+  "source_identity": {
+    "git_commit": "c1d6296fce6fcad8e9c9ec95cdb6e3026ec5226e",
+    "worktree_dirty": false,
+    "source_sha256": "d08d1334106aba0bfdf24b55769a98d1b2d4cb24c0e8bedc0caaa6ac85df6465"
+  },
+  "source_audit": {
+    "reviewed_sources": [
+      "EB-NeRD",
+      "Adressa"
+    ],
+    "files": {
+      "ebnerd-home.html": {
+        "url": "https://recsys.eb.dk/",
+        "status": 200,
+        "final_url": "https://recsys.eb.dk/",
+        "bytes": 22873,
+        "stopped_at_cap": false,
+        "etag": "W/\"69f88143-5959\"",
+        "content_range": null,
+        "sha256": "6800db7bd401ce6ef6ecac95251301a704adfac0dd6f681ea27318e921ce0222"
+      },
+      "ebnerd-description.html": {
+        "url": "https://recsys.eb.dk/dataset/",
+        "status": 200,
+        "final_url": "https://recsys.eb.dk/dataset/",
+        "bytes": 28026,
+        "stopped_at_cap": false,
+        "etag": "W/\"69f88143-6d7a\"",
+        "content_range": null,
+        "sha256": "0b7523db5318ddfeabf4648515dde4244b4c0cef83b067dbf7f2afe64ee89208"
+      },
+      "ebnerd-terms.pdf": {
+        "url": "https://recsys.eb.dk/assets/pdf/general_license_terms.pdf",
+        "status": 200,
+        "final_url": "https://recsys.eb.dk/assets/pdf/general_license_terms.pdf",
+        "bytes": 66215,
+        "stopped_at_cap": false,
+        "etag": "\"69f88143-102a7\"",
+        "content_range": null,
+        "sha256": "ae938188815bf59db1774e459ce89edc843b6097c176ad80bb5f6047b52050bf"
+      },
+      "adressa-home.html": {
+        "url": "https://reclab.idi.ntnu.no/dataset/",
+        "status": 200,
+        "final_url": "https://reclab.idi.ntnu.no/dataset/",
+        "bytes": 3354,
+        "stopped_at_cap": false,
+        "etag": "W/\"5ea031ec-d1a\"",
+        "content_range": null,
+        "sha256": "a90c921b7140704cefc289510b78b1a74877b973c906eca932d38470330e6bcc"
+      },
+      "adressa-description.pdf": {
+        "url": "https://reclab.idi.ntnu.no/dataset/cxdataset_v5.pdf",
+        "status": 200,
+        "final_url": "https://reclab.idi.ntnu.no/dataset/cxdataset_v5.pdf",
+        "bytes": 2720784,
+        "stopped_at_cap": false,
+        "etag": "\"5a8eefd7-298410\"",
+        "content_range": null,
+        "sha256": "8b5282669c5d9bcb9f38fcec9cfe3423bd450b2775dc57d6fc1fe3757acaa0c1"
+      },
+      "adressa-license.html": {
+        "url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        "status": 200,
+        "final_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        "bytes": 37146,
+        "stopped_at_cap": false,
+        "etag": null,
+        "content_range": null,
+        "sha256": "ca0597fd98c6fb2417993e867b5cbc91ebdc55e24839c38e4674e8c78d817f17"
+      },
+      "adressa-prefix.tar.gz.partial": {
+        "url": "https://reclab.idi.ntnu.no/dataset/one_week.tar.gz",
+        "status": 206,
+        "final_url": "https://reclab.idi.ntnu.no/dataset/one_week.tar.gz",
+        "bytes": 2097152,
+        "stopped_at_cap": true,
+        "etag": "\"59ede471-5455bf31\"",
+        "content_range": "bytes 0-2097151/1414905649",
+        "sha256": "03b81814ccc446dc4e14fc07ff40b8bf06cec1a9bcc78b44d71bf53c6dfb7c31"
+      }
+    },
+    "ebnerd": {
+      "downloaded_behavior_rows": 0,
+      "access": "No dataset downloaded: official terms require name/email/affiliation and prior acceptance; none submitted",
+      "primary_natural_cold_start_eligible": false,
+      "reasons": [
+        "Future activity-selected population",
+        "Static 21-day histories must not be called complete lifetime history",
+        "Official test omits click labels",
+        "Danish vs current English-oriented encoder and HN domain"
+      ]
+    },
+    "adressa_prefix": {
+      "member": "one_week/20170105",
+      "rows": 500,
+      "fields": {
+        "eventId": 500,
+        "city": 500,
+        "url": 500,
+        "referrerHostClass": 500,
+        "region": 500,
+        "sessionStop": 500,
+        "userId": 500,
+        "sessionStart": 500,
+        "referrerSearchEngine": 83,
+        "deviceType": 500,
+        "time": 500,
+        "referrerUrl": 269,
+        "country": 500,
+        "os": 500,
+        "profile": 228,
+        "category1": 160,
+        "activeTime": 237,
+        "canonicalUrl": 228,
+        "publishtime": 203,
+        "keywords": 203,
+        "id": 228,
+        "title": 228,
+        "author": 202,
+        "referrerSocialNetwork": 15,
+        "referrerQuery": 3,
+        "query": 2
+      },
+      "dates": {
+        "2017-01-04": 500
+      },
+      "title_rows": 228,
+      "exact_title_matches_prior_catalog": 0,
+      "prior_news_sha256": "cf96317adc16297a2835a6d521a80482f4677c3c031c5c7473cff6825ac32b20",
+      "impression_list_present": false,
+      "sampling": "First complete JSON lines of first regular archive member; non-random, not a population sample",
+      "primary_natural_cold_start_eligible": false,
+      "reasons": [
+        "Visited-page events do not provide displayed non-click labels",
+        "Window start left-censors user history; no registration time",
+        "Norwegian texts; incomplete historical content versions"
+      ]
+    },
+    "independence": "Different publisher/date/ID namespaces are not proof of person-level non-overlap; never join anonymized IDs across releases",
+    "decision": "No new efficacy dataset admitted; no full download or model fitting",
+    "source_sha256": "d2beeb07e3066b5415a323a933db0227269d791607e3804318fd3e8e3e7c74f4"
+  },
+  "benchmark": {
+    "provenance": {
+      "git_commit": "c1d6296fce6fcad8e9c9ec95cdb6e3026ec5226e",
+      "worktree_dirty": false,
+      "source_sha256": "d08d1334106aba0bfdf24b55769a98d1b2d4cb24c0e8bedc0caaa6ac85df6465"
+    },
+    "synthetic_only": true,
+    "efficacy_authorized": false,
+    "deployed": false,
+    "baseline_commit": "cc144ad",
+    "baseline_sha256": "1bc8c4129bca0cf9d59cb42e4d1b64bb1909e7dc0c1dfa11b9618314d8fa9021",
+    "input_db_sha256": "406df3cb5e44c7afbd5f5a5b5a5dcc3dd0d2db27636d012b9e8b651c9d11cd79",
+    "catalog_items": 2006,
+    "requests": 120,
+    "catalog_versions": {
+      "bd50658077bf23e59f50b047a7eda0b4d0169ed18dfcb53ae747b999310fab49": 3594164,
+      "444b0dc715d648adef8cae98c276f78f76a88827870bba85f7c5f170f4195b78": 3594183
+    },
+    "initial_catalog_version": "444b0dc715d648adef8cae98c276f78f76a88827870bba85f7c5f170f4195b78",
+    "future_catalog_version": "bd50658077bf23e59f50b047a7eda0b4d0169ed18dfcb53ae747b999310fab49",
+    "initialization_ms": 11042.290245182812,
+    "catalog_registration_ms": 213.14352890476584,
+    "cold_reader_ms": 66.41768617555499,
+    "latency_ms": {
+      "all": {
+        "plain": {
+          "p50": 5.139712477102876,
+          "p95": 10.534500214271247,
+          "maximum": 11.50917075574398
+        },
+        "recorded": {
+          "p50": 66.9513049069792,
+          "p95": 83.60606811475009,
+          "maximum": 393.33696383982897
+        },
+        "replay": {
+          "p50": 10.561817325651646,
+          "p95": 11.667530005797744,
+          "maximum": 12.167750857770443
+        },
+        "capture_overhead": {
+          "p50": 61.82547356002033,
+          "p95": 78.61686958931386,
+          "maximum": 388.27784080058336
+        }
+      },
+      "0": {
+        "plain": {
+          "p50": 4.8903964925557375,
+          "p95": 10.28501642867923,
+          "maximum": 11.50917075574398
+        },
+        "recorded": {
+          "p50": 64.62330603972077,
+          "p95": 69.60471230559054,
+          "maximum": 110.50128284841776
+        },
+        "replay": {
+          "p50": 10.293026454746723,
+          "p95": 11.488645849749446,
+          "maximum": 11.982278898358345
+        },
+        "capture_overhead": {
+          "p50": 56.11843732185662,
+          "p95": 64.9889777414501,
+          "maximum": 105.68861477077007
+        }
+      },
+      "1": {
+        "plain": {
+          "p50": 5.171051481738687,
+          "p95": 10.549173504114151,
+          "maximum": 10.79149590805173
+        },
+        "recorded": {
+          "p50": 59.29886596277356,
+          "p95": 69.29342902731152,
+          "maximum": 83.75674393028021
+        },
+        "replay": {
+          "p50": 10.480212979018688,
+          "p95": 11.667530005797744,
+          "maximum": 11.75529696047306
+        },
+        "capture_overhead": {
+          "p50": 53.830134915187955,
+          "p95": 64.45616665296258,
+          "maximum": 80.08825499564409
+        }
+      },
+      "3": {
+        "plain": {
+          "p50": 6.132481154054403,
+          "p95": 9.799450729042292,
+          "maximum": 10.414738673716784
+        },
+        "recorded": {
+          "p50": 63.757384894415736,
+          "p95": 76.92394568584862,
+          "maximum": 108.89662383124232
+        },
+        "replay": {
+          "p50": 10.447067907080054,
+          "p95": 11.503131221979856,
+          "maximum": 11.506141163408756
+        },
+        "capture_overhead": {
+          "p50": 57.395491283386946,
+          "p95": 73.42209231574091,
+          "maximum": 103.76359056681395
+        }
+      },
+      "5": {
+        "plain": {
+          "p50": 5.006328457966447,
+          "p95": 10.442346008494496,
+          "maximum": 10.99795801565051
+        },
+        "recorded": {
+          "p50": 75.0119078438729,
+          "p95": 83.91530311200768,
+          "maximum": 89.62465636432171
+        },
+        "replay": {
+          "p50": 10.418056976050138,
+          "p95": 12.163195689208806,
+          "maximum": 12.167750857770443
+        },
+        "capture_overhead": {
+          "p50": 68.78414377570152,
+          "p95": 78.62685767468065,
+          "maximum": 78.62988486886024
+        }
+      },
+      "10": {
+        "plain": {
+          "p50": 5.0549376755952835,
+          "p95": 10.535833681933582,
+          "maximum": 10.563089046627283
+        },
+        "recorded": {
+          "p50": 68.24560859240592,
+          "p95": 76.0921245906502,
+          "maximum": 83.45235418528318
+        },
+        "replay": {
+          "p50": 10.892851511016488,
+          "p95": 11.47403281647712,
+          "maximum": 11.599074117839336
+        },
+        "capture_overhead": {
+          "p50": 62.72474839352071,
+          "p95": 70.77764524146914,
+          "maximum": 74.8161762021482
+        }
+      },
+      "25": {
+        "plain": {
+          "p50": 5.128899589180946,
+          "p95": 10.070503479801118,
+          "maximum": 10.964767076075077
+        },
+        "recorded": {
+          "p50": 66.92926282994449,
+          "p95": 91.982342861593,
+          "maximum": 393.33696383982897
+        },
+        "replay": {
+          "p50": 10.411527007818222,
+          "p95": 11.3857704680413,
+          "maximum": 11.793766170740128
+        },
+        "capture_overhead": {
+          "p50": 61.782420380041,
+          "p95": 86.96920371148758,
+          "maximum": 388.27784080058336
+        }
+      }
+    },
+    "request_bytes": {
+      "p50": 8033.5,
+      "p95": 11959.25,
+      "maximum": 12081.0
+    },
+    "small_history_request_bytes": {
+      "p50": 7611.0,
+      "p95": 11157.0,
+      "maximum": 11236.0
+    },
+    "catalog_reuse": {
+      "measured_requests": 120,
+      "initial_versions": 1,
+      "bytes_without_sharing": 431301960,
+      "bytes_with_sharing": 3594183
+    },
+    "gates": {
+      "capture_overhead_p95_limit_ms": 10,
+      "capture_overhead_pass": false,
+      "small_request_limit_bytes": 32768,
+      "small_request_pass": true
+    },
+    "exact_baseline_matches": 120,
+    "preserved_after_future_changes": 120,
+    "environment": {
+      "python": "3.11.16 (main, Sep 29 2026, 14:59:26) [Clang 22.1.3 ]",
+      "numpy": "1.26.4",
+      "platform": "Linux-5.15.0-139-generic-x86_64-with-glibc2.31",
+      "cpu": "Intel(R) Xeon(R) Gold 5220R CPU @ 2.20GHz",
+      "torch_threads": 2,
+      "blas_threads": 1,
+      "peak_rss_mib": 945.66796875
+    },
+    "limitations": [
+      "Shared host; 120 sequential synthetic requests, no concurrency capacity claim",
+      "Warm encoder/explicit-query cache; no recommendation-result cache",
+      "Measured service includes SQLite reads and durable journal fsync, excludes HTTP and API snapshot writes",
+      "Cold reader means a new reader object, OS page cache not evicted",
+      "Exact scores are tied to source and numerical environment; not cross-hardware bitwise guarantee"
+    ]
+  },
+  "validation": {
+    "run_id": "engineering",
+    "provenance": {
+      "git_commit": "c1d6296fce6fcad8e9c9ec95cdb6e3026ec5226e",
+      "worktree_dirty": false,
+      "source_sha256": "d08d1334106aba0bfdf24b55769a98d1b2d4cb24c0e8bedc0caaa6ac85df6465"
+    },
+    "passed": true,
+    "commands": [
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "exit_code": 0,
+        "log": "validation-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "run",
+          "build"
+        ],
+        "exit_code": 0,
+        "log": "validation-1.log"
+      },
+      {
+        "command": [
+          "/home/zhuzy/projects/SignalFeed/.venv/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "src",
+          "tests",
+          "scripts"
+        ],
+        "exit_code": 0,
+        "log": "validation-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "--prefix",
+          "frontend",
+          "test"
+        ],
+        "exit_code": 0,
+        "log": "validation-3.log"
+      }
+    ],
+    "browser": {
+      "startTime": "2026-10-29T10:25:55.132Z",
+      "duration": 8678.449,
+      "expected": 10,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "python_passed": 90,
+  "browser_passed": 10,
+  "preserved_old_files": {
+    "count": 291,
+    "mismatches": 0,
+    "audit_sha256": "7ab9a54218e1adbf817b443e6f2d28defeb15172c9c8c10ccf098839f6886a46"
+  },
+  "raw_artifact_root": "artifacts/replay-v5",
+  "artifact_manifest": {
+    "file": "artifacts/replay-v5/artifact-manifest.json",
+    "sha256": "27878dcce495f22e90ec1189eee6671cbb4ca6f5b1d482acc543d00c05def2e4",
+    "files": 279
+  },
+  "key_artifacts": {
+    "source-audit/audit.json": "e0bff71caa7ff943b613b88317a796d98d968d023681e23224bd481a240ebd17",
+    "benchmark/results.json": "3d393f29b00b2f255824cb3703c994734b39dbc3a4dcc81754a58daddab0fc16",
+    "benchmark/timings.jsonl": "385b93bd104667776fba5e6a8b7b2e57ec361e40970562046611ead26fbd8c6b",
+    "benchmark/catalog-input.sqlite": "406df3cb5e44c7afbd5f5a5b5a5dcc3dd0d2db27636d012b9e8b651c9d11cd79",
+    "benchmark/baseline-serving.py": "1bc8c4129bca0cf9d59cb42e4d1b64bb1909e7dc0c1dfa11b9618314d8fa9021",
+    "engineering/reports/validation.json": "c32cd1ba52a902adf50b3c3dd2111c8c3864d36824f5a86f9b25c9119c6b4e66",
+    "development-checks.json": "12e88cb0feeaef3ce69f52c11fe01512a60b0966d8ed8ef70482a29a807f7c88",
+    "independent-cost-audit.json": "660b7a024cd8312c1436dbbd06a5b4335b61a26a02b4082d96ec570ca2f2a2aa",
+    "service-state.json": "d53a82c0440af412439d876f48ffa7e7d1d1cdd4f7feab061c16c746fdc7a92e"
+  },
+  "documentation": {
+    "docs/REPLAY_V5_PROTOCOL.md": "294c9afcd29212221fc7fe40afc0001b2cef773faa86b4ee6d1f1382838c5ea8",
+    "docs/REPLAY_V5_RESULTS.md": "775867f611cbeb75a5fedcd20ef91f1159fd55081cf0957fe9455b688716b6d0",
+    "docs/NEWS_SOURCE_V5_AUDIT.md": "43cf5a08c31bc5fbd326962d642587fa2a706eaf758e64828535b7142d8e42b3"
+  },
+  "service": {
+    "checked_at_utc": "2026-10-29T10:30:56.645142+00:00",
+    "processes": "    PID                  STARTED COMMAND\n  24292 Thu Oct 29 16:34:34 2026 /home/zhuzy/projects/SignalFeed/.venv/bin/python /data1/zhuzy/signalfeed/temporal-v4/observer-source/scripts/audit_feedback.py --db /data1/zhuzy/signalfeed/online.sqlite --output /data1/zhuzy/signalfeed/temporal-v4/daily --protocol /data1/zhuzy/signalfeed/temporal-v4/observer-source/configs/temporal_v4.json --watch --log /data1/zhuzy/signalfeed/temporal-v4/observer.log\n3676922 Thu Oct 29 05:15:11 2026 .venv/bin/python -m signalfeed.cli serve --port 8768\n3683350 Thu Oct 29 05:25:29 2026 /data1/zhuzy/signalfeed/venv/bin/python /data1/zhuzy/signalfeed/coldfuse-live/venv/bin/signalfeed serve\n",
+    "listeners": "LISTEN    0         2048             127.0.0.1:8768             0.0.0.0:*        users:((\"python\",pid=3676922,fd=10))                                           \nLISTEN    0         2048             127.0.0.1:8765             0.0.0.0:*        users:((\"signalfeed\",pid=3683350,fd=10))                                       ",
+    "processes_unchanged": true,
+    "restarted": false,
+    "production_api_requests_by_this_run": 0,
+    "synthetic_production_events": 0,
+    "observer_session": "signalfeed-temporal-v4",
+    "observer_next_capture_utc": "2026-10-30T00:10:00+00:00",
+    "observer_close_utc": "2026-11-23T00:10:00+00:00"
+  },
+  "decision": {
+    "efficacy_authorized": false,
+    "full_catalog_replay_supported_in_production": false,
+    "isolated_replay_verified": true,
+    "capture_latency_passed": false,
+    "capture_storage_passed": true,
+    "new_dataset_admitted": false,
+    "new_algorithm_search": false,
+    "generation_quota_experiment": false,
+    "deployed": false,
+    "remote_pushed": false
+  },
+  "privacy": "Raw behavioral source prefixes and database copies remain local; no anonymous real-user rows committed. Benchmarked users are synthetic."
+}
