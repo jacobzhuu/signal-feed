@@ -109,6 +109,7 @@ def benchmark(root):
         torch_threads=2,
         blas_threads=1,
         cached_results=False,
+        catalog_items=len(f.news),
         sample=dict(counts),
         records=len(records),
         groups={
@@ -128,7 +129,7 @@ def benchmark(root):
         },
         notes=[
             "First100 hash-selected users per cohort, all scenarios/budgets; fixed rotating method order",
-            "No HTTP, database or text encoder request cost; preencoded 101130-item catalog",
+            "No HTTP, database or text encoder request cost; catalog size recorded explicitly",
             "Shared host, CPU only; peak RSS includes all loaded baselines, not isolated adapter memory",
             "Generation/DNN bypassed entirely for rejected guard groups; no future feedback used",
         ],

@@ -158,6 +158,10 @@ def report(root, output):
                     aliases.append("natural/all")
                     if r["k"]:
                         aliases.append("natural/1-5")
+                    kind = (
+                        "natural_known" if r["known_large_train"] else "natural_unseen"
+                    )
+                    aliases.extend([f"{kind}/{r['k']}", f"{kind}/all"])
                 expected = (
                     "adaptation"
                     if guard["groups"][r["guard_group"]]["accepted"]
@@ -334,6 +338,22 @@ def report(root, output):
         maximum_recomputed_error=maximum_error,
         provenance=provenance,
         groups=summary,
+        sample_counts={
+            cohort: dict(
+                users=sum(c == cohort for c, _, _ in sample),
+                unseen_large_train=sum(
+                    not row["known_large_train"]
+                    for (c, _, _), row in sample.items()
+                    if c == cohort
+                ),
+                first_dev_request=sum(
+                    row["first_dev_request"]
+                    for (c, _, _), row in sample.items()
+                    if c == cohort
+                ),
+            )
+            for cohort in ("main", "natural")
+        },
         primary_tests=tests,
         exploratory_comparisons=comparisons,
         exploratory_slices=slices,
