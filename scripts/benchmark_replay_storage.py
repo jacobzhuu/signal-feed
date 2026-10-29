@@ -286,7 +286,7 @@ def main():
         efficacy_authorized=False,
         deployed=False,
         baseline="c1d6296",
-        frozen_files={p.name: file_digest(p) for p in frozen.iterdir()},
+        frozen_files={p.name: file_digest(p) for p in frozen.iterdir() if p.is_file()},
         source_inputs={
             name: file_digest(previous / name)
             for name in ["results.json", "timings.jsonl", "isolated.sqlite"]
