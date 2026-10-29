@@ -185,6 +185,23 @@ def report(root, output):
     assert selection["algorithm"] == guard["algorithm"] == algorithm_identity()
     assert guard["selection_sha256"] == sha256(root / "selection.json")
     decisions = decision_audit(root, selection, guard)
+    cost = json.loads((root / "reports/inference_cost.json").read_text())
+    assert cost["algorithm"] == algorithm_identity()
+    assert cost["guard_sha256"] == sha256(root / "guard.json")
+    assert cost["dataset_sha256"] == sha256(dataset / "manifest.json")
+    cost_raw = root / "reports/inference_cost_predictions.jsonl"
+    assert cost["raw_sha256"] == sha256(cost_raw)
+    cost_predictions = {}
+    with cost_raw.open() as stream:
+        for line in stream:
+            r = json.loads(line)
+            key = (r["user"], r["group"], r["method"])
+            assert key not in cost_predictions
+            cost_predictions[key] = r
+    parity = {
+        method: dict(checked=0, full_order_differences=0, max_recall50_difference=0.0)
+        for method in METHODS
+    }
     users, sample = {}, {}
     excluded = set(json.loads((dataset / "excluded_large_users.json").read_text()))
     for split in ("select", "guard", "test"):
@@ -260,6 +277,27 @@ def report(root, output):
                 record_metrics = {}
                 for method in METHODS:
                     pred = r["variants"][method]
+                    measured = (
+                        cost_predictions.get((r["user"], r["group"], method))
+                        if seed == 42
+                        else None
+                    )
+                    if measured:
+                        check = parity[method]
+                        check["checked"] += 1
+                        check["full_order_differences"] += measured["ids"] != pred
+                        difference = abs(
+                            len(set(measured["ids"][:50]) & p) - len(set(pred[:50]) & p)
+                        ) / max(1, len(p))
+                        check["max_recall50_difference"] = max(
+                            check["max_recall50_difference"], difference
+                        )
+                        if method != "coldfuse":
+                            assert measured["ids"] == pred, (
+                                method,
+                                r["user"],
+                                r["group"],
+                            )
                     assert all(first[i] < r["time"] and i not in h for i in pred)
                     metrics = independent_metrics(
                         pred, r["targets"], r["labels"], r["scores"][method]
@@ -341,6 +379,29 @@ def report(root, output):
                     prior_agreement=r["prior_agreement"],
                     effective_history=len(h),
                 )
+                new_content = set(r["variants"]["interest_only"])
+                side_unique = channels["sid_prefix"] - new_content - channels["itemcf"]
+                diag["sid_exclusive_of_new_content_recall"] = len(
+                    side_unique & p
+                ) / max(1, len(p))
+                diag["new_content_sid_jaccard"] = len(
+                    new_content & channels["sid_prefix"]
+                ) / max(1, len(new_content | channels["sid_prefix"]))
+                diag["new_representation_recall50_gain"] = (
+                    record_metrics["interest_only"]["recall50"]
+                    - record_metrics["content_safe"]["recall50"]
+                )
+                diag["residual_fusion_recall50_gain"] = (
+                    record_metrics["adaptation"]["recall50"]
+                    - record_metrics["interest_only"]["recall50"]
+                )
+                diag["adaptation_pool_loss"] = len(
+                    (
+                        (new_content | channels["itemcf"] | channels["sid_prefix"])
+                        - set(r["variants"]["adaptation"])
+                    )
+                    & p
+                ) / max(1, len(p))
                 for a, b in itertools.combinations(channels, 2):
                     diag[f"jaccard/{a}/{b}"] = len(channels[a] & channels[b]) / max(
                         1, len(channels[a] | channels[b])
@@ -364,6 +425,8 @@ def report(root, output):
             flush=True,
         )
     assert maximum_error < 1e-12
+    assert sum(v["checked"] for v in parity.values()) == len(cost_predictions)
+    assert all(v["max_recall50_difference"] == 0 for v in parity.values())
     summary = {}
     csv_rows = []
     for (group, method), metrics in sorted(values.items()):
@@ -427,6 +490,8 @@ def report(root, output):
         selection=selection,
         guard=guard,
         decision_audit=decisions,
+        standalone_inference_cost=cost,
+        standalone_prediction_parity=parity,
         maximum_recomputed_error=maximum_error,
         provenance=provenance,
         groups=summary,
@@ -613,6 +678,33 @@ def markdown(result, output):
         lines.append(
             f"| {key} | {test['n']} | {test['mean']:+.6f} | {test['p_holm']:.6f} | {test['accepted']} |"
         )
+    cost = result["standalone_inference_cost"]
+    lines += [
+        "",
+        "## 独立无结果缓存的推理成本",
+        "",
+        f"目录{cost['catalog_items']:,}篇；模型/数据/索引初始化{cost['model_and_data_load_seconds']:.2f}秒，随后权重和索引驻留。固定前100模拟及前100自然用户，方法轮转顺序，Torch 2线程、BLAS 1线程，共享CPU主机。下表各格为p50/p95毫秒；全部15方法的原始调用与成本在JSON。",
+        "",
+        "| 场景/历史 | 每方法请求 | 内容回退 | 固定融合 | 旧ColdFuse | 新适应 | 准入回退后 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for group, methods in cost["groups"].items():
+        lines.append(
+            "| "
+            + group
+            + " | "
+            + str(methods["content_safe"]["n"])
+            + " | "
+            + " | ".join(
+                f"{methods[m]['p50_ms']:.2f}/{methods[m]['p95_ms']:.2f}" for m in MAIN
+            )
+            + " |"
+        )
+    lines += [
+        "",
+        f"新适应实际生成调用{cost['generation_calls']['adaptation']}次，准入回退后{cost['generation_calls']['guarded']}次。此处不包含HTTP、数据库写入或文本编码，不代表HN线上端到端容量。进程峰值RSS {cost['peak_process_rss_kib'] / 1024:.1f} MiB包含全部基线，不能当作适应模块独占内存。",
+        "",
+    ]
     lines += [
         "",
         "完整15个方法、所有曝光/召回指标、三种子数值、消融差值、预定义分群、候选互补和研究成本见 [JSON](adaptation_results.json) / [CSV](ADAPTATION_METRICS.csv)。曝光稀疏融合分数与密集DNN/内容分数的AUC支持不同，不作主要收益口径。",
