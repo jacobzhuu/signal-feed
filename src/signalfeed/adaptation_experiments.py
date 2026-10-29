@@ -53,6 +53,13 @@ def algorithm_identity():
 def extended(root):
     dataset = root / "dataset"
     manifest = json.loads((dataset / "manifest.json").read_text())
+    if manifest.get("protocol") != "adaptation-v2-canonical-identity":
+        raise ValueError(
+            "Cross-release identities must be reconciled before evaluation"
+        )
+    audit = manifest["identity_audit"]
+    if audit["matched_event_signatures"] != audit["exposed_event_signatures"]:
+        raise ValueError("Exposed-event exclusion is incomplete")
     for name, meta in manifest["files"].items():
         if sha256(dataset / name) != meta["sha256"]:
             raise ValueError(f"Dataset changed: {name}")

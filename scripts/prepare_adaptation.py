@@ -29,6 +29,68 @@ def fields(file):
             yield line.rstrip("\n").split("\t")
 
 
+def news_mapping(old_news, large_news):
+    """Numeric IDs are independently anonymized in small and large releases."""
+    keys = ("category", "subcategory", "title", "abstract", "url")
+    content = {tuple(n[k] for k in keys): n["id"] for n in old_news}
+    if len(content) != len(old_news):
+        raise ValueError("Ambiguous frozen article identity")
+    mapping, texts = {}, {}
+    for n in large_news:
+        identity = tuple(n[k] for k in keys)
+        if n["id"] in texts and texts[n["id"]] != identity:
+            raise ValueError("Large train/dev article identity conflict")
+        texts[n["id"]] = identity
+        mapping[n["id"]] = content.get(identity, "large:" + n["id"])
+    if not set(content.values()).issubset(mapping.values()):
+        raise ValueError("Cannot reconcile all frozen articles by exact content")
+    return mapping
+
+
+def event_signature(stamp, history, items):
+    # Labels and local impression/user identifiers deliberately do not enter.
+    return digest(json.dumps([stamp, history[-20:], sorted(items)]))
+
+
+def canonical_exclusions(root, baseline, mapping):
+    signatures = set()
+    for split in ("train", "valid", "test"):
+        with (baseline / f"mind/{split}.jsonl").open() as stream:
+            for line in stream:
+                r = json.loads(line)
+                signatures.add(event_signature(r["time"], r["history"], r["items"]))
+    excluded, matched, stamps = set(), set(), {}
+    for split in ("train", "dev"):
+        for _, user, stamp, hist, candidates in fields(
+            root / f"raw/{split}/behaviors.tsv"
+        ):
+            if stamp not in stamps:
+                stamps[stamp] = (
+                    datetime.strptime(stamp, "%m/%d/%Y %I:%M:%S %p")
+                    .replace(tzinfo=timezone.utc)
+                    .timestamp()
+                )
+            history = [mapping[i] for i in hist.split()[-20:]]
+            items = [mapping[p.rsplit("-", 1)[0]] for p in candidates.split()]
+            signature = event_signature(stamps[stamp], history, items)
+            if signature in signatures:
+                matched.add(signature)
+                excluded.add(user)
+    if matched != signatures:
+        raise ValueError(
+            f"Only {len(matched)}/{len(signatures)} exposed events reconciled; independence unproven"
+        )
+    audit = dict(
+        exposed_event_signatures=len(signatures),
+        matched_event_signatures=len(matched),
+        excluded_large_users=len(excluded),
+        labels_used=False,
+        identity="exact category/subcategory/title/abstract/url; time + last20 canonical history + unordered exposure IDs",
+        duplicate_event_policy="exclude every matching large user conservatively",
+    )
+    return excluded, audit
+
+
 def prepare(root, baseline):
     out = root / "dataset"
     out.mkdir(exist_ok=True)
@@ -37,11 +99,6 @@ def prepare(root, baseline):
     news = json.loads((baseline / "mind/news.json").read_text())
     old_count = len(news)
     index = {n["id"]: i for i, n in enumerate(news)}
-    excluded = set()
-    for part in ("train", "valid", "test"):
-        with (baseline / f"mind/{part}.jsonl").open() as stream:
-            for line in stream:
-                excluded.add(json.loads(line)["user"])
     hashes = {}
     for split in ("train", "dev"):
         archive = root / f"raw/MINDlarge_{split}.zip"
@@ -50,9 +107,24 @@ def prepare(root, baseline):
         with zipfile.ZipFile(archive) as z:
             for name in ("news.tsv", "behaviors.tsv"):
                 z.extract(name, dest)
+    large_news = []
+    for split in ("train", "dev"):
+        for row in fields(root / f"raw/{split}/news.tsv"):
+            large_news.append(
+                dict(
+                    zip(
+                        ("id", "category", "subcategory", "title", "abstract", "url"),
+                        row[:6],
+                    )
+                )
+            )
+    mapping = news_mapping(news, large_news)
+    excluded, identity_audit = canonical_exclusions(root, baseline, mapping)
+    print(dict(identity_audit=identity_audit), flush=True)
     # Only articles in the frozen catalog or new dev catalog are needed.
     for row in fields(root / "raw/dev/news.tsv"):
         iid, cat, sub, title, abstract, url = row[:6]
+        iid = mapping[iid]
         if iid not in index:
             index[iid] = len(news)
             news.append(
@@ -83,9 +155,10 @@ def prepare(root, baseline):
                     .timestamp()
                 )
             stamp = stamps[stamp]
-            history = hist.split()[-20:]
+            history = [mapping[i] for i in hist.split()[-20:]]
             # Availability uses IDs only, never positivity.
             pairs = [v.rsplit("-", 1) for v in candidates.split()]
+            pairs = [(mapping[i], label) for i, label in pairs]
             for item in history + [p[0] for p in pairs]:
                 if item in first:
                     first[item] = min(first[item], stamp)
@@ -119,6 +192,13 @@ def prepare(root, baseline):
     # Resolve overlap using metadata before any label-based diagnostics.
     natural = {u: r for u, r in natural.items() if u not in main}
     files, users = {}, {}
+    for name, obj in (
+        ("identity_audit.json", identity_audit),
+        ("large_to_canonical.json", mapping),
+        ("excluded_large_users.json", sorted(excluded)),
+    ):
+        (out / name).write_text(json.dumps(obj, indent=2))
+        files[name] = dict(sha256=sha256(out / name))
     for split in ("select", "guard", "test"):
         for name, pool in (("main", main), ("natural", natural)):
             limit = 1200 if split == "test" and name == "main" else 600
@@ -179,7 +259,7 @@ def prepare(root, baseline):
     for name in ("news.json", "embeddings.npy", "codes.npy"):
         files[name] = dict(sha256=sha256(out / name))
     manifest = dict(
-        protocol="adaptation-v1",
+        protocol="adaptation-v2-canonical-identity",
         baseline_commit="b747819",
         baseline=str(baseline),
         encoder_revision=ENCODER_REVISION,
@@ -187,7 +267,8 @@ def prepare(root, baseline):
         files=files,
         old_items=old_count,
         items=len(news),
-        excluded_small_users=len(excluded),
+        excluded_large_users=len(excluded),
+        identity_audit=identity_audit,
         rows_scanned=counts,
         labels_used_for_sampling=False,
         note="User-disjoint, same historical period; not a future-time or real signup test",

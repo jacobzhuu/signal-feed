@@ -145,7 +145,7 @@ bash scripts/start.sh
 
 ## 兴趣适应独立研究运行
 
-稳定引用：`stable-coldfuse-b747819`。第二轮主实验冻结于 `f771488` 的独立检出 `artifacts/adaptation-v1/source`；其核心文件哈希同时写入每份结果。`SIGNALFEED_HOME` 仍指向不可变 `coldfuse-v2`，新数据和报告通过单独 `--run` 指向新目录，不能将扩展目录覆盖到旧模型绑定的数据中。
+稳定引用：`stable-coldfuse-b747819`。`adaptation-v1` 因跨版本原始ID关联错误在选参完成前停止，保留失败数据，不得用于效果结论。正式修正版使用 `adaptation-canonical-v2` 标签的独立检出 `artifacts/adaptation-v2/source`；核心文件哈希同时写入每份结果。`SIGNALFEED_HOME` 仍指向不可变 `coldfuse-v2`，新数据和报告通过单独 `--run` 指向新目录，不能将扩展目录覆盖到旧模型绑定的数据中。准备器要求旧文章内容精确对应、全部旧事件指纹匹配后排除其large用户；禁止直接拼接small/large数字ID。
 
 ```bash
 # 新运行目录中先下载两个固定revision的MINDlarge zip到raw/，保留许可和来源。

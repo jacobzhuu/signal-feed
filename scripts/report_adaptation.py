@@ -91,6 +91,8 @@ def report(root, output):
     output.mkdir(exist_ok=True, parents=True)
     dataset = root / "dataset"
     data = json.loads((dataset / "manifest.json").read_text())
+    if data.get("protocol") != "adaptation-v2-canonical-identity":
+        raise ValueError("Unreconciled cross-release identity")
     for name, meta in data["files"].items():
         assert sha256(dataset / name) == meta["sha256"], name
     selection = json.loads((root / "selection.json").read_text())
@@ -98,6 +100,7 @@ def report(root, output):
     assert selection["algorithm"] == guard["algorithm"] == algorithm_identity()
     assert guard["selection_sha256"] == sha256(root / "selection.json")
     users, sample = {}, {}
+    excluded = set(json.loads((dataset / "excluded_large_users.json").read_text()))
     for split in ("select", "guard", "test"):
         users[split] = set()
         for cohort in ("main", "natural"):
@@ -106,6 +109,7 @@ def report(root, output):
                     r = json.loads(line)
                     assert r["user"] not in users[split]
                     users[split].add(r["user"])
+                    assert r["user"] not in excluded
                     if split == "test":
                         sample[cohort, r["id"], r["user"]] = r
     assert (
@@ -323,7 +327,7 @@ def report(root, output):
         for key, users in sorted(cohort_values.items())
     }
     result = dict(
-        protocol="adaptation-v1",
+        protocol=data["protocol"],
         dataset=data,
         selection=selection,
         guard=guard,
