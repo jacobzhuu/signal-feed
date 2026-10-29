@@ -11,7 +11,7 @@ from scipy.stats import rankdata
 from scipy import sparse
 from signalfeed.adaptation_experiments import paired_test, holm, algorithm_identity
 from signalfeed.adaptation import GRID
-from signalfeed.provenance import sha256
+from signalfeed.provenance import sha256, code_identity
 
 METHODS = (
     "popularity",
@@ -534,6 +534,8 @@ def report(root, output):
         for key, users in sorted(cohort_values.items())
     }
     result = dict(
+        reporting_provenance=code_identity(),
+        reporting_script_sha256=sha256(Path(__file__)),
         protocol=data["protocol"],
         dataset=data,
         selection=selection,
