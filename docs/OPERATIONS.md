@@ -142,3 +142,25 @@ bash scripts/start.sh
 ```
 
 自动化浏览器和压测使用 8768、`coldfuse-v2/browser.sqlite`、`SIGNALFEED_TEST_EVENTS=1`。性能工具会拒绝真实服务；不向真实入口发送合成点击。通过自动化执行器启动持久服务时应在 tmux 中运行，避免执行器结束时回收子进程。
+
+## 兴趣适应独立研究运行
+
+稳定引用：`stable-coldfuse-b747819`。第二轮主实验冻结于 `f771488` 的独立检出 `artifacts/adaptation-v1/source`；其核心文件哈希同时写入每份结果。`SIGNALFEED_HOME` 仍指向不可变 `coldfuse-v2`，新数据和报告通过单独 `--run` 指向新目录，不能将扩展目录覆盖到旧模型绑定的数据中。
+
+```bash
+# 新运行目录中先下载两个固定revision的MINDlarge zip到raw/，保留许可和来源。
+.venv/bin/python scripts/prepare_adaptation.py --run <新目录> \
+  --baseline /data1/zhuzy/signalfeed/coldfuse-v2
+export SIGNALFEED_HOME=/data1/zhuzy/signalfeed/coldfuse-v2
+export SIGNALFEED_ADAPTATION_RUN=<新目录>
+bash scripts/run_adaptation.sh
+# 上述脚本先选参、再准入、再最终评估；已有预测时拒绝覆盖。
+.venv/bin/python scripts/benchmark_adaptation.py --run <新目录>
+.venv/bin/python scripts/report_adaptation.py --run <新目录> --output <报告目录>
+```
+
+绘图需要项目 research 可选依赖 `matplotlib==3.9.4`（安装 `.[research]`），生成 PNG/SVG，适合直接导出。不得为了报告重新选择参数。报告器要求参数、准入、测试来源和当前核心逐文件一致，并重新计算指标和检查用户/候选/目录完整性。
+
+`GuardedAdapter` 支持在调用昂贵通道之前按证据回退；决策文件带域名和策略版本，MIND结果不能作为HN准入文件。第二轮算法没有自动替换现有服务策略；真实8765服务保持原进程和原模型。真实反馈仍不足时，不生成模拟线上收益。
+
+工程验证用新的独立报告目录运行 `scripts/verify.py --browser`，`SIGNALFEED_BASE_URL=http://127.0.0.1:8768` 连接现有隔离测试服务；不覆盖第一轮验收文件。
