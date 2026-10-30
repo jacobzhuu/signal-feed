@@ -3,13 +3,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
+import { directBrowserOptions, openSignalFeed } from './browser_navigation.mjs';
 const { chromium } = await import(pathToFileURL(process.env.SIGNALFEED_PLAYWRIGHT || path.resolve('frontend/node_modules/playwright/index.mjs')));
 const base = process.env.SIGNALFEED_BASE_URL;
 const output = process.env.SIGNALFEED_ACCEPT_REPORT;
 if (!base || !output) throw Error('Explicit base URL and output required');
-const health = await (await fetch(base + '/api/health')).json();
+const healthResponse = await fetch(base + '/api/health');
+if (!healthResponse.ok) throw Error(`Health request failed: HTTP ${healthResponse.status()}`);
+const health = await healthResponse.json();
 if (!health.test_events && process.env.SIGNALFEED_ACCEPT_PRODUCTION !== 'yes') throw Error('Production acceptance not enabled');
-const browser = await chromium.launch({headless:true});
+const browser = await chromium.launch(directBrowserOptions());
 const report = {base, release:health.release, started:new Date().toISOString(), browsers:[], first:[], concurrent:[], checks:[]};
 function assert(ok, message) { if (!ok) throw Error(message); }
 async function context(label) {
@@ -61,7 +64,7 @@ try {
   for (const user of [a,b]) {
     const page=await user.ctx.newPage();
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(base);await page.locator('article').first().waitFor();
+    await openSignalFeed(page, base);
     const samples=[];
     samples.push(publicSample(await clickCold(page,true)));
     if(user===a) await interests(a,['Artificial Intelligence','Programming']);
@@ -99,7 +102,7 @@ try {
     // Every measured request is the identity's first ColdFuse request.
     const topics=i%2?['Security','Science']:['Artificial Intelligence','Programming'];
     await interests(user,topics);
-    const page=await user.ctx.newPage();await page.goto(base);await page.locator('article').first().waitFor();
+    const page=await user.ctx.newPage();await openSignalFeed(page, base);
     const sample=await clickCold(page,true);
     report.first.push({...publicSample(sample),label:user.label,identity_sha256:user.identity_sha256});
     await user.ctx.close();
